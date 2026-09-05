@@ -296,8 +296,7 @@ export class Validator {
 
         // Required for GitHub operations
         if (!process.env.GITHUB_TOKEN) {
-            result.errors.push('GITHUB_TOKEN is required for creating pull requests');
-            result.valid = false;
+            result.warnings.push('GITHUB_TOKEN is not set; pull request creation will be skipped');
         }
 
         // Optional but recommended

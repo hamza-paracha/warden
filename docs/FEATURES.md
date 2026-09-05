@@ -1,8 +1,5 @@
-# warden Feature Documentation
+# Warden capabilities
 
-## Current Capabilities
-- Modular state management
-- Real-time dashboard components
-- Standardized performance monitoring
+See [the README](../README.md) for supported scanning, remediation, policy gates, and local console workflows.
 
-*Last updated to reflect latest development sprint.*
+The React component in `examples/dashboard/` is an unconnected design mock, not part of the CLI or the working local console. Modular state management and real-time dashboard updates are not implemented.

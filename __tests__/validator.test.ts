@@ -16,12 +16,14 @@ describe('Validator', () => {
             process.env = originalEnv;
         });
 
-        it('should fail validation when GITHUB_TOKEN is missing', () => {
+        it('should allow local scanning when GITHUB_TOKEN is missing', () => {
             delete process.env.GITHUB_TOKEN;
             const result = validator.validateEnvironment();
 
-            expect(result.valid).toBe(false);
-            expect(result.errors).toContain('GITHUB_TOKEN is required for creating pull requests');
+            expect(result.valid).toBe(true);
+            expect(result.warnings).toContain(
+                'GITHUB_TOKEN is not set; pull request creation will be skipped'
+            );
         });
 
         it('should pass validation when GITHUB_TOKEN is present', () => {

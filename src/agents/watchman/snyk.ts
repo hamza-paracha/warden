@@ -64,9 +64,8 @@ export class SnykScanner {
         this.retryDelayMs = retryDelayMs;
         this.timeoutMs = timeoutMs;
 
-        // Results are stored in the Sentinel's installation directory
-        const SENTINEL_HOME = path.resolve(__dirname, '../../../');
-        this.outputDir = path.join(SENTINEL_HOME, 'scan-results');
+        // Store results alongside the project being scanned.
+        this.outputDir = path.resolve(process.cwd(), 'scan-results');
 
         if (!fs.existsSync(this.outputDir)) {
             fs.mkdirSync(this.outputDir, { recursive: true });

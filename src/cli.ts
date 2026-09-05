@@ -538,10 +538,10 @@ program
         try {
             const nodeVersion = process.version;
             const major = parseInt(nodeVersion.slice(1).split('.')[0], 10);
-            if (major >= 18) {
+            if (major > 22 || (major === 22 && Number(nodeVersion.split('.')[1]) >= 12)) {
                 logger.success(`  Node ${nodeVersion} ✓`);
             } else {
-                logger.error(`  Node ${nodeVersion} (requires v18+)`);
+                logger.error(`  Node ${nodeVersion} (requires v22.12+)`);
                 issues++;
             }
         } catch {

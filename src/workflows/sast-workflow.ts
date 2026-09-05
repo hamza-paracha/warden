@@ -93,32 +93,7 @@ export class SastWorkflow implements IWorkflow {
                 this.progress.failStep('scan', 'Security scan failed');
                 logger.error('Scanner execution failed', scanError);
 
-                if (options.repository) {
-                    throw scanError;
-                }
-
-                logger.warn('All scanners failed. Falling back to DEMO MODE with mock data...');
-
-                const { MockScanner } = await import('../scanners/mock-scanner');
-                const mockScanner = new MockScanner();
-                const scanResult = await mockScanner.scan();
-                result.scanResult = scanResult as any;
-                result.warnings.push('All configured scanners failed; demo mode used mock data.');
-
-                const outputDir = path.resolve(process.cwd(), SCAN_RESULTS_DIR);
-                if (!fs.existsSync(outputDir)) {
-                    fs.mkdirSync(outputDir, { recursive: true });
-                }
-                fs.writeFileSync(
-                    path.join(outputDir, SCAN_RESULTS_FILE),
-                    JSON.stringify(scanResult, null, 2)
-                );
-
-                snykUtils.printSummary(scanResult as any);
-                const fixSummary = await this.orchestrateFix(scanResult as any, options);
-                Object.assign(result, fixSummary);
-
-                logger.header('✅ Session Completed (Demo Mode)');
+                throw scanError;
             }
         } finally {
             process.chdir(originalCwd);

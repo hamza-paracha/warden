@@ -12,6 +12,8 @@
  * branch here.
  */
 
+import * as fs from 'fs';
+import * as path from 'path';
 import { loadRules } from './core/rules';
 import { loadSpecs } from './core/spec';
 import { logger } from './utils/logger';
@@ -57,70 +59,81 @@ export async function runWarden(options: WardenOptions): Promise<WardenRunResult
             ? await new DastWorkflow().run(options)
             : await new SastWorkflow().run(options);
 
-    if (workflowResult.scanResult) {
-        const remediationPlan = buildRemediationPlan(workflowResult.scanResult, workflowResult);
-        workflowResult.remediationPlan = remediationPlan;
-
-        const config = getConfig().getConfig();
-        const policyDecision = evaluatePolicy(
-            workflowResult.scanResult,
-            remediationPlan,
-            options,
-            config
-        );
-        workflowResult.policyDecision = policyDecision;
-
-        workflowResult.reportPaths = {
-            markdown: writeMarkdownReport(
-                workflowResult.scanResult,
-                workflowResult,
-                remediationPlan
-            ),
-            html: writeHtmlReport(workflowResult.scanResult),
-            agentRunRecord: writeAgentRunRecord(
-                workflowResult.scanResult,
-                workflowResult,
-                remediationPlan,
-                policyDecision
-            ),
-        };
-
-        if (policyDecision.approvalRequired && !policyDecision.approvalSatisfied) {
-            workflowResult.reportPaths.approvalRequest = writeApprovalRequest(
-                workflowResult.scanResult,
-                remediationPlan,
-                policyDecision
+    const originalCwd = process.cwd();
+    try {
+        process.chdir(workflowResult.targetPath);
+        if (workflowResult.scanResult) {
+            fs.mkdirSync('scan-results', { recursive: true });
+            fs.writeFileSync(
+                path.join('scan-results', 'scan-results.json'),
+                JSON.stringify(workflowResult.scanResult, null, 2)
             );
+            const remediationPlan = buildRemediationPlan(workflowResult.scanResult, workflowResult);
+            workflowResult.remediationPlan = remediationPlan;
+
+            const config = getConfig().getConfig();
+            const policyDecision = evaluatePolicy(
+                workflowResult.scanResult,
+                remediationPlan,
+                options,
+                config
+            );
+            workflowResult.policyDecision = policyDecision;
+
+            workflowResult.reportPaths = {
+                markdown: writeMarkdownReport(
+                    workflowResult.scanResult,
+                    workflowResult,
+                    remediationPlan
+                ),
+                html: writeHtmlReport(workflowResult.scanResult),
+                agentRunRecord: writeAgentRunRecord(
+                    workflowResult.scanResult,
+                    workflowResult,
+                    remediationPlan,
+                    policyDecision
+                ),
+            };
+
+            if (policyDecision.approvalRequired && !policyDecision.approvalSatisfied) {
+                workflowResult.reportPaths.approvalRequest = writeApprovalRequest(
+                    workflowResult.scanResult,
+                    remediationPlan,
+                    policyDecision
+                );
+            }
+
+            const historyService = new RunHistoryService();
+            workflowResult.history = historyService.append(
+                createHistoryEntry(workflowResult.scanResult, workflowResult)
+            );
+
+            const memoryService = new MemoryService();
+            workflowResult.memory = memoryService.update(
+                workflowResult.repository || workflowResult.targetPath,
+                workflowResult.scanResult
+            );
+
+            const notificationService = new NotificationService(config.notifications);
+            await notificationService.send({
+                title: 'Warden Scan Completed',
+                message: remediationPlan.summary,
+                severity:
+                    remediationPlan.posture === 'critical'
+                        ? 'error'
+                        : remediationPlan.posture === 'elevated'
+                          ? 'warning'
+                          : 'success',
+                details: {
+                    repository: workflowResult.repository || workflowResult.targetPath,
+                    vulnerabilities: workflowResult.scanResult.summary.total,
+                    fixed: workflowResult.appliedFixes,
+                    prUrl: workflowResult.pullRequestUrls[0],
+                },
+            });
         }
-
-        const historyService = new RunHistoryService();
-        workflowResult.history = historyService.append(
-            createHistoryEntry(workflowResult.scanResult, workflowResult)
-        );
-
-        const memoryService = new MemoryService();
-        workflowResult.memory = memoryService.update(
-            workflowResult.repository || workflowResult.targetPath,
-            workflowResult.scanResult
-        );
-
-        const notificationService = new NotificationService(config.notifications);
-        await notificationService.send({
-            title: 'Warden Scan Completed',
-            message: remediationPlan.summary,
-            severity:
-                remediationPlan.posture === 'critical'
-                    ? 'error'
-                    : remediationPlan.posture === 'elevated'
-                      ? 'warning'
-                      : 'success',
-            details: {
-                repository: workflowResult.repository || workflowResult.targetPath,
-                vulnerabilities: workflowResult.scanResult.summary.total,
-                fixed: workflowResult.appliedFixes,
-                prUrl: workflowResult.pullRequestUrls[0],
-            },
-        });
+    } finally {
+        process.chdir(originalCwd);
     }
 
     return workflowResult;

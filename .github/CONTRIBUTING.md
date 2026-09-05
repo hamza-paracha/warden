@@ -12,7 +12,7 @@ Thank you for your interest in contributing to Warden! This document provides gu
 
 ### Prerequisites
 
-- Node.js 18 or higher
+- Node.js 22.12 or higher
 - Git
 - A GitHub account
 - Familiarity with TypeScript

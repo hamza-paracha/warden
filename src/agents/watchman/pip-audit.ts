@@ -12,7 +12,7 @@ export class PipAuditScanner {
     private outputDir: string;
 
     constructor() {
-        const projectRoot = path.resolve(__dirname, '../../../');
+        const projectRoot = process.cwd();
         this.outputDir = path.join(projectRoot, SCAN_RESULTS_DIR);
 
         if (!fs.existsSync(this.outputDir)) {

@@ -9,7 +9,7 @@ export interface WardenRules {
 
 // Ensure the rules are loaded from the Warden's home directory even if process.cwd() changes
 const WARDEN_HOME = path.resolve(__dirname, '../../');
-const RULES_FILE = path.join(WARDEN_HOME, 'WARDEN_CORE.md');
+const RULES_FILE = path.join(WARDEN_HOME, 'docs/SPEC/WARDEN_CORE.md');
 
 /**
  * Load and parse Warden's Rules of Engagement

@@ -85,6 +85,27 @@ describe('SastWorkflow integration', () => {
         jest.clearAllMocks();
     });
 
+    it('propagates scanner errors without attempting fixes on demo data', async () => {
+        const { NpmAuditScanner } = await import('../src/agents/watchman/npm-audit');
+        (NpmAuditScanner as jest.Mock).mockImplementationOnce(() => ({
+            scan: jest.fn().mockRejectedValue(new Error('registry unavailable')),
+        }));
+        const { SastWorkflow } = await import('../src/workflows/sast-workflow');
+        await expect(
+            new SastWorkflow().run({
+                targetPath: originalCwd,
+                dryRun: false,
+                scanner: 'npm-audit',
+                minSeverity: 'high',
+                maxFixes: 1,
+                verbose: false,
+            })
+        ).rejects.toThrow('registry unavailable');
+        expect(diagnoseMock).not.toHaveBeenCalled();
+        expect(applyFixMock).not.toHaveBeenCalled();
+        expect(process.cwd()).toBe(originalCwd);
+    });
+
     it('blocks risky fixes until approval is provided', async () => {
         const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'warden-sast-'));
         fs.writeFileSync(

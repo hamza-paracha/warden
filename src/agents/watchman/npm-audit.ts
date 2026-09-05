@@ -21,7 +21,7 @@ export class NpmAuditScanner {
     private outputDir: string;
 
     constructor() {
-        const projectRoot = path.resolve(__dirname, '../../../');
+        const projectRoot = process.cwd();
         this.outputDir = path.join(projectRoot, SCAN_RESULTS_DIR);
 
         if (!fs.existsSync(this.outputDir)) {
@@ -124,6 +124,17 @@ export class NpmAuditScanner {
             data = JSON.parse(jsonOutput);
         } catch (e) {
             throw new Error('Failed to parse npm audit JSON output');
+        }
+
+        if (
+            !data ||
+            data.error ||
+            !data.vulnerabilities ||
+            typeof data.vulnerabilities !== 'object'
+        ) {
+            throw new Error(
+                data?.error?.summary || 'npm audit did not return a vulnerability report'
+            );
         }
 
         const vulnerabilities = this.formatVulnerabilities(data);

@@ -15,7 +15,7 @@ Warden is maintained as a public open-source security automation project.
 
 The repository includes:
 
-- CI across Node.js 18, 20, and 22.
+- CI across Node.js 22 and 24.
 - Release packaging checks with `npm pack --dry-run`.
 - Test coverage for scanners, policy gates, baselines, reports, notifications, schema contracts, and CLI flows.
 - Machine-readable schemas for scan results, run history, recurring package memory, approval requests, and agent handoff records.
