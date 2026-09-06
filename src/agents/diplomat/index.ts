@@ -1,4 +1,6 @@
 import { Octokit } from '@octokit/rest';
+import { runProcess } from '../../services/process';
+import { GIT_TIMEOUT_MS } from '../../constants';
 import { logger } from '../../utils/logger';
 
 export interface PrConfig {
@@ -80,13 +82,13 @@ export class DiplomatAgent {
     }
 
     private async getDefaultBaseBranch(): Promise<string> {
-        const { execSync } = await import('child_process');
-
         try {
-            const ref = execSync('git symbolic-ref refs/remotes/origin/HEAD', {
-                encoding: 'utf-8',
-            }).trim();
-            const branch = ref.split('/').pop();
+            const ref = (
+                await runProcess('git', ['symbolic-ref', 'refs/remotes/origin/HEAD'], {
+                    timeout: GIT_TIMEOUT_MS,
+                })
+            ).stdout.trim();
+            const branch = ref.replace(/^refs\/remotes\/origin\//, '');
             return branch || 'main';
         } catch {
             return 'main';
@@ -97,13 +99,13 @@ export class DiplomatAgent {
      * Extract owner and repo from git remote URL
      */
     private async getRepoInfo(): Promise<{ owner: string; repo: string }> {
-        const { execSync } = await import('child_process');
-
         try {
             // Get the remote URL
-            const remoteUrl = execSync('git config --get remote.origin.url', {
-                encoding: 'utf-8',
-            }).trim();
+            const remoteUrl = (
+                await runProcess('git', ['config', '--get', 'remote.origin.url'], {
+                    timeout: GIT_TIMEOUT_MS,
+                })
+            ).stdout.trim();
 
             // Parse GitHub URL (supports both HTTPS and SSH formats)
             const match = remoteUrl.match(/github\.com[:/]([^/]+)\/(.+?)(?:\.git)?$/);
@@ -179,12 +181,14 @@ export class DiplomatAgent {
      * Detect all local warden/* branches
      */
     async detectWardenBranches(): Promise<string[]> {
-        const { execSync } = await import('child_process');
-
         try {
-            const branches = execSync('git branch --list "warden/*"', {
-                encoding: 'utf-8',
-            }).trim();
+            const branches = (
+                await runProcess(
+                    'git',
+                    ['branch', '--list', 'warden/*', '--format=%(refname:short)'],
+                    { timeout: GIT_TIMEOUT_MS }
+                )
+            ).stdout.trim();
 
             if (!branches) {
                 return [];
@@ -207,14 +211,16 @@ export class DiplomatAgent {
      * Push a branch to remote origin
      */
     async pushBranch(branch: string): Promise<boolean> {
-        const { execSync } = await import('child_process');
-
         try {
             logger.diplomat(`Pushing ${branch} to origin...`);
-            execSync(`git push -u origin ${branch}`, {
-                encoding: 'utf-8',
-                stdio: 'inherit',
+            await runProcess('git', ['check-ref-format', '--branch', branch], {
+                timeout: GIT_TIMEOUT_MS,
             });
+            await runProcess(
+                'git',
+                ['push', '-u', 'origin', `refs/heads/${branch}:refs/heads/${branch}`],
+                { timeout: GIT_TIMEOUT_MS }
+            );
             logger.success(`Branch ${branch} pushed successfully.`);
             return true;
         } catch (error: any) {

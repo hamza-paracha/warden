@@ -68,6 +68,7 @@ try {
     assert.equal(report.appliedFixes, 0);
     for (const name of [
         'scan-results.json',
+        'warden.sarif',
         'warden-report.md',
         'scan-results.html',
         'agent-run-record.json',
@@ -76,6 +77,19 @@ try {
     ]) {
         assert.ok(fs.existsSync(path.join(project, 'scan-results', name)), name);
     }
+    const scanOnly = scan(['--scan-only']);
+    assert.equal(scanOnly.status, 0, scanOnly.stderr);
+    assert.equal(JSON.parse(scanOnly.stdout).attemptedFixes, 0);
+    assert.equal(JSON.parse(scanOnly.stdout).dryRun, true);
+    for (const args of [['--max-fixes', '2oops'], ['--severity', 'urgent'], ['--scan-timeout', '0']]) {
+        assert.notEqual(scan(args).status, 0, `must reject ${args.join(' ')}`);
+    }
+    const exportedPath = path.join(temp, 'exported.sarif');
+    const exported = spawnSync(process.execPath, [cli, 'export-sarif', '--input',
+        path.join(project, 'scan-results/scan-results.json'), '--output', exportedPath],
+        { cwd: temp, env, encoding: 'utf8' });
+    assert.equal(exported.status, 0, exported.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(exportedPath, 'utf8')).version, '2.1.0');
     assert.ok(
         !fs.existsSync(path.join(installed, 'scan-results')),
         'must not write scans into the installation'

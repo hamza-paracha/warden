@@ -1,23 +1,11 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { runProcess } from '../../services/process';
+import { GIT_TIMEOUT_MS } from '../../constants';
 import { logger } from '../../utils/logger';
 
-const execAsync = promisify(exec);
-
 export class GitManager {
-    /**
-     * Execute a shell command
-     */
-    private async exec(command: string): Promise<string> {
-        try {
-            const { stdout, stderr } = await execAsync(command);
-            if (stderr && !stderr.includes('Already on') && !stderr.includes('Switched to')) {
-                // Git messages often go to stderr even on success, so we just log them if needed
-            }
-            return stdout.trim();
-        } catch (error: any) {
-            throw new Error(`Command failed: ${command}\n${error.message}`);
-        }
+    private async exec(args: string[]): Promise<string> {
+        const result = await runProcess('git', args, { timeout: GIT_TIMEOUT_MS });
+        return result.stdout.trim();
     }
 
     /**
@@ -25,7 +13,7 @@ export class GitManager {
      */
     async branchExists(branchName: string): Promise<boolean> {
         try {
-            await this.exec(`git rev-parse --verify ${branchName}`);
+            await this.exec(['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`]);
             return true;
         } catch {
             return false;
@@ -37,9 +25,11 @@ export class GitManager {
      * If branch exists, just checkout it.
      */
     async checkoutBranch(branchName: string): Promise<void> {
+        await this.exec(['check-ref-format', '--branch', branchName]);
+        if (branchName.startsWith('-')) throw new Error('Invalid branch name');
         // Check if we are already on the branch to avoid errors
         try {
-            const currentBranch = await this.exec('git rev-parse --abbrev-ref HEAD');
+            const currentBranch = await this.exec(['rev-parse', '--abbrev-ref', 'HEAD']);
             if (currentBranch === branchName) {
                 logger.debug(`Already on branch: ${branchName}`);
                 return;
@@ -48,10 +38,10 @@ export class GitManager {
             const exists = await this.branchExists(branchName);
             if (exists) {
                 logger.debug(`Switching to existing branch: ${branchName}`);
-                await this.exec(`git checkout ${branchName}`);
+                await this.exec(['checkout', branchName]);
             } else {
                 logger.debug(`Creating new branch: ${branchName}`);
-                await this.exec(`git checkout -b ${branchName}`);
+                await this.exec(['checkout', '-b', branchName]);
             }
         } catch (error) {
             throw new Error(`Failed to checkout branch ${branchName}: ${error}`);
@@ -59,11 +49,11 @@ export class GitManager {
     }
 
     async getCurrentBranch(): Promise<string> {
-        return this.exec('git rev-parse --abbrev-ref HEAD');
+        return this.exec(['rev-parse', '--abbrev-ref', 'HEAD']);
     }
 
     async hasUncommittedChanges(): Promise<boolean> {
-        const status = await this.exec('git status --porcelain');
+        const status = await this.exec(['status', '--porcelain']);
         return status.trim().length > 0;
     }
 
@@ -72,7 +62,13 @@ export class GitManager {
      */
     async stageAll(): Promise<void> {
         logger.debug('Staging changes...');
-        await this.exec('git add .');
+        await this.exec(['add', '.']);
+    }
+
+    /** Stage only the files owned by a remediation, excluding unrelated generated artifacts. */
+    async stageFiles(files: readonly string[]): Promise<void> {
+        if (files.length === 0) return;
+        await this.exec(['add', '--', ...files]);
     }
 
     /**
@@ -80,7 +76,7 @@ export class GitManager {
      */
     async commit(message: string): Promise<void> {
         logger.debug(`Committing changes: "${message}"`);
-        await this.exec(`git commit -m "${message}"`);
+        await this.exec(['commit', '-m', message]);
     }
 
     /**
@@ -89,7 +85,7 @@ export class GitManager {
      */
     async revertChanges(): Promise<void> {
         logger.info('Reverting changes...');
-        await this.exec('git restore .');
+        await this.exec(['restore', '.']);
     }
 
     /**
@@ -98,9 +94,9 @@ export class GitManager {
     async checkoutMain(): Promise<void> {
         // Try 'main' or 'master'
         try {
-            await this.exec('git checkout main');
+            await this.exec(['checkout', 'main']);
         } catch {
-            await this.exec('git checkout master');
+            await this.exec(['checkout', 'master']);
         }
     }
 }

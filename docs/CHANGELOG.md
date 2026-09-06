@@ -5,6 +5,32 @@ All notable changes to Warden will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-09-06
+
+### Added
+
+- Scan-only mode (`--scan-only`) and per-attempt SAST timeout control (`--scan-timeout`).
+- Automatic SARIF 2.1.0 reports and offline `export-sarif` command.
+- Scanner execution timing, deterministic prioritization benchmark, and refactor notes.
+- Regression coverage for process failures, scanner parsing, atomic writes, targeted Git staging, and SARIF export.
+
+### Changed
+
+- Up to 9x faster vulnerability prioritization in the 100,000-finding benchmark; this is not an end-to-end scan speedup.
+- Consolidated process execution and scanner fallback handling; removed redundant Snyk/pip-audit version checks.
+- Diagnose selected findings in memory and defer optional workflow/GitHub imports.
+- Use atomic JSON replacement for scanner output, history, memory, and SARIF.
+- Move TypeScript and ts-node to development dependencies.
+
+### Fixed
+
+- Malformed scanner output and operational failures no longer appear as clean scans.
+- npm parent dependency fix versions are no longer applied to child packages.
+- Parse Snyk multi-project output and persist accurate retry metadata.
+- Stop inferring Python severity from description substrings such as "overflow".
+- Pass Git and scanner arguments literally, and stage only remediation files.
+- Validate CLI scanner, severity, fix limits, and timeout values.
+
 ## [1.8.0] - 2026-05-22
 
 ### ✨ Added

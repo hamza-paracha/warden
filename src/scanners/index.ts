@@ -7,42 +7,21 @@
  */
 
 import { logger } from '../utils/logger';
-import { Ecosystem } from '../types';
+import { Vulnerability, ScanSummary } from '../types';
 
 /**
  * The canonical scan result shape used across all scanners.
  * Must match the structure produced by SnykScanner and NpmAuditScanner.
  */
-export interface ScannerVulnerability {
-    id: string;
-    title: string;
-    severity: 'critical' | 'high' | 'medium' | 'low';
-    packageName: string;
-    version: string;
+export interface ScannerVulnerability extends Omit<Vulnerability, 'fixedIn' | 'description'> {
     fixedIn?: string[];
     description?: string;
-    cvssScore?: number;
-    ecosystem?: Ecosystem;
-    // DAST-specific (optional)
-    targetHost?: string;
-    targetPort?: number;
-    service?: string;
-    serviceVersion?: string;
-    exploitAvailable?: boolean;
-    exploitModule?: string;
-    findings?: string[];
 }
 
 export interface ScannerResult {
     timestamp: string;
     vulnerabilities: ScannerVulnerability[];
-    summary: {
-        total: number;
-        critical: number;
-        high: number;
-        medium: number;
-        low: number;
-    };
+    summary: ScanSummary;
     scanner?: string;
     projectPath?: string;
     scanMode?: string;

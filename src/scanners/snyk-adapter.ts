@@ -20,7 +20,7 @@ export class SnykScannerAdapter implements IScanner {
         // SnykScanner.test() returns a compatible ScanResult shape
         const result = await this.inner.test();
         // Cast metadata field name: SnykScanner uses 'metadata', ScannerResult uses 'metadata'
-        return result as unknown as ScannerResult;
+        return result;
     }
 
     /** Expose the underlying scanner for utilities like filterHighPriority / printSummary */

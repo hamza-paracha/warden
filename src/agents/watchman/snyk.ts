@@ -1,75 +1,39 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../../utils/logger';
+import { runProcess } from '../../services/process';
+import { saveScanResult } from '../../services/artifacts';
+import { summarizeVulnerabilities } from '../../utils/scan-results';
 
-const execAsync = promisify(exec);
-
-export interface Vulnerability {
-    id: string;
-    title: string;
-    severity: 'low' | 'medium' | 'high' | 'critical';
-    packageName: string;
-    version: string;
-    fixedIn?: string[];
-    description?: string;
-    cvssScore?: number;
-    references?: string[];
-    ecosystem?: 'npm' | 'python';
-}
-
-export interface ScanResult {
-    timestamp: string;
-    vulnerabilities: Vulnerability[];
-    summary: {
-        total: number;
-        critical: number;
-        high: number;
-        medium: number;
-        low: number;
-    };
-    scanner?: string;
-    projectPath?: string;
-    scanMode?: string;
-    metadata?: {
-        scanDuration?: number;
-        retryCount?: number;
-        errors?: string[];
-        [key: string]: any;
-    };
-}
+import type {
+    ScannerVulnerability as Vulnerability,
+    ScannerResult as ScanResult,
+} from '../../scanners';
+export type {
+    ScannerVulnerability as Vulnerability,
+    ScannerResult as ScanResult,
+} from '../../scanners';
 
 export interface ScannerOptions {
     token?: string;
+    projectPath?: string;
     maxRetries?: number;
     retryDelayMs?: number;
     timeoutMs?: number;
 }
 
 export class SnykScanner {
-    private outputDir: string;
-    private maxRetries: number;
-    private retryDelayMs: number;
-    private timeoutMs: number;
+    private readonly projectPath: string;
+    private readonly maxRetries: number;
+    private readonly retryDelayMs: number;
+    private readonly timeoutMs: number;
+    private readonly token?: string;
 
     constructor(options: ScannerOptions = {}) {
-        const { token, maxRetries = 3, retryDelayMs = 2000, timeoutMs = 300000 } = options;
-
-        if (!process.env.SNYK_TOKEN && !token) {
-            logger.warn('SNYK_TOKEN not found. Scanner may fail or require CLI login.');
-        }
-
-        this.maxRetries = maxRetries;
-        this.retryDelayMs = retryDelayMs;
-        this.timeoutMs = timeoutMs;
-
-        // Store results alongside the project being scanned.
-        this.outputDir = path.resolve(process.cwd(), 'scan-results');
-
-        if (!fs.existsSync(this.outputDir)) {
-            fs.mkdirSync(this.outputDir, { recursive: true });
-        }
+        this.projectPath = path.resolve(options.projectPath || process.cwd());
+        this.maxRetries = options.maxRetries ?? 3;
+        this.retryDelayMs = options.retryDelayMs ?? 2000;
+        this.timeoutMs = options.timeoutMs ?? 300000;
+        this.token = options.token;
     }
 
     private async retryWithBackoff<T>(
@@ -80,7 +44,9 @@ export class SnykScanner {
         try {
             return await fn();
         } catch (error: any) {
-            const isTimeout = error.killed || error.signal === 'SIGTERM';
+            const isTimeout =
+                error.code !== 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' &&
+                (error.killed || error.signal === 'SIGTERM');
             const isNetworkError = error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED';
 
             if (attempt < this.maxRetries && (isTimeout || isNetworkError)) {
@@ -105,41 +71,15 @@ export class SnykScanner {
         const errors: string[] = [];
 
         try {
-            await this.retryWithBackoff(async () => {
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 10000);
-                try {
-                    await execAsync('snyk --version', {
-                        signal: controller.signal as any,
-                    });
-                } finally {
-                    clearTimeout(timeout);
-                }
-            }, 'Snyk CLI version check');
-        } catch (error: any) {
-            const errorMsg =
-                'Snyk CLI not found or not responding. Please install: npm install -g snyk';
-            errors.push(errorMsg);
-            throw new Error(errorMsg);
-        }
-
-        try {
             const result = await this.retryWithBackoff(async () => {
-                logger.watchman(`Executing Snyk scan (timeout: ${this.timeoutMs / 1000}s)...`);
-                try {
-                    const { stdout } = await execAsync('snyk test --json', {
-                        maxBuffer: 10 * 1024 * 1024,
-                        timeout: this.timeoutMs,
-                        cwd: process.cwd(), // Scan the current directory
-                    });
-                    return stdout;
-                } catch (error: any) {
-                    if (error.stdout) return error.stdout;
-                    if (error.killed || error.signal === 'SIGTERM') {
-                        throw new Error(`Snyk scan timed out after ${this.timeoutMs / 1000}s`);
-                    }
-                    throw error;
-                }
+                retryCount++;
+                const { stdout } = await runProcess('snyk', ['test', '--json'], {
+                    cwd: this.projectPath,
+                    timeout: this.timeoutMs,
+                    allowedExitCodes: [0, 1],
+                    ...(this.token ? { env: { ...process.env, SNYK_TOKEN: this.token } } : {}),
+                });
+                return stdout;
             }, 'Snyk security scan');
 
             const scanDuration = Date.now() - startTime;
@@ -147,27 +87,21 @@ export class SnykScanner {
 
             scanResult.metadata = {
                 scanDuration,
-                retryCount,
+                retryCount: retryCount - 1,
                 errors: errors.length > 0 ? errors : undefined,
             };
 
+            saveScanResult(scanResult, this.projectPath);
             logger.success(`Scan completed in ${(scanDuration / 1000).toFixed(2)}s`);
             return scanResult;
         } catch (error: any) {
             const errorMsg = `Snyk scan failed: ${error.message}`;
             errors.push(errorMsg);
-            const fallbackResult: ScanResult = {
-                timestamp: new Date().toISOString(),
-                vulnerabilities: [],
-                summary: { total: 0, critical: 0, high: 0, medium: 0, low: 0 },
-                metadata: { scanDuration: Date.now() - startTime, retryCount, errors },
-            };
-            this.saveScanResults(fallbackResult);
             throw new Error(errorMsg);
         }
     }
 
-    private parseSnykOutput(jsonOutput: string): ScanResult {
+    parseSnykOutput(jsonOutput: string): ScanResult {
         logger.watchman('Parsing Snyk results...');
         let data: any;
         try {
@@ -176,82 +110,46 @@ export class SnykScanner {
             throw new Error('Failed to parse Snyk JSON output');
         }
 
+        const reports = Array.isArray(data) ? data : [data];
+        if (
+            reports.length === 0 ||
+            reports.some(
+                (report) => !report || report.error || !Array.isArray(report.vulnerabilities)
+            )
+        ) {
+            throw new Error('Snyk did not return a vulnerability report');
+        }
         const vulnerabilities: Vulnerability[] = [];
-        const summary = { total: 0, critical: 0, high: 0, medium: 0, low: 0 };
-
-        if (data.vulnerabilities && Array.isArray(data.vulnerabilities)) {
-            for (const vuln of data.vulnerabilities) {
-                const severity = (
-                    vuln.severity || 'low'
-                ).toLowerCase() as Vulnerability['severity'];
+        for (const report of reports) {
+            for (const vuln of report.vulnerabilities) {
+                const rawSeverity = String(vuln.severity || 'medium').toLowerCase();
+                const severity: Vulnerability['severity'] =
+                    rawSeverity === 'critical' || rawSeverity === 'high' || rawSeverity === 'low'
+                        ? rawSeverity
+                        : 'medium';
                 vulnerabilities.push({
                     id: vuln.id || vuln.CVSSv3 || 'unknown',
                     title: vuln.title || 'Unknown vulnerability',
                     severity,
                     packageName: vuln.packageName || vuln.name || 'unknown',
                     version: vuln.version || 'unknown',
-                    fixedIn: vuln.fixedIn || [],
-                    description: vuln.description,
+                    fixedIn: Array.isArray(vuln.fixedIn) ? vuln.fixedIn : [],
+                    description: vuln.description || '',
                     cvssScore: vuln.cvssScore,
+                    ecosystem: report.packageManager === 'pip' ? 'python' : 'npm',
                 });
-                summary.total++;
-                summary[severity]++;
             }
         }
+        const summary = summarizeVulnerabilities(vulnerabilities);
 
         const result: ScanResult = {
             timestamp: new Date().toISOString(),
             vulnerabilities,
             summary,
+            scanner: 'snyk',
+            projectPath: this.projectPath,
         };
-        this.saveScanResults(result);
         return result;
-    }
-
-    private saveScanResults(result: ScanResult): void {
-        try {
-            this.validateScanResult(result);
-            const timestamp = new Date().toISOString().replace(/:/g, '-');
-            const filename = `scan-${timestamp}.json`;
-            const filepath = path.join(this.outputDir, filename);
-            const latestPath = path.join(this.outputDir, 'scan-results.json');
-            const jsonContent = JSON.stringify(result, null, 2);
-
-            const tempPath = `${filepath}.tmp`;
-            const tempLatestPath = `${latestPath}.tmp`;
-
-            try {
-                fs.writeFileSync(tempPath, jsonContent, { encoding: 'utf8' });
-                fs.renameSync(tempPath, filepath);
-                fs.writeFileSync(tempLatestPath, jsonContent, { encoding: 'utf8' });
-                fs.renameSync(tempLatestPath, latestPath);
-                logger.info(`Scan results saved to: ${filepath}`);
-                logger.debug(`Latest results: ${latestPath}`);
-            } catch (writeError) {
-                [tempPath, tempLatestPath].forEach((tmpFile) => {
-                    if (fs.existsSync(tmpFile))
-                        try {
-                            fs.unlinkSync(tmpFile);
-                        } catch {
-                            /* ignore */
-                        }
-                });
-                throw writeError;
-            }
-        } catch (error: any) {
-            logger.error(`Failed to save scan results: ${error.message}`);
-            throw error;
-        }
-    }
-
-    private validateScanResult(result: ScanResult): void {
-        if (!result) throw new Error('Scan result is null or undefined');
-        if (!result.timestamp || typeof result.timestamp !== 'string')
-            throw new Error('Invalid timestamp');
-        if (!Array.isArray(result.vulnerabilities))
-            throw new Error('Vulnerabilities must be an array');
-        if (!result.summary || typeof result.summary !== 'object')
-            throw new Error('Invalid summary');
     }
 
     filterHighPriority(result: ScanResult): Vulnerability[] {

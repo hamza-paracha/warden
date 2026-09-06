@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
+import { parseNonNegativeInteger, parsePositiveInteger } from './utils/run-options';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as fs from 'fs';
@@ -46,10 +47,29 @@ program
     .option('-q, --quiet', 'Suppress non-essential output')
     .option('--json', 'Output results as JSON')
     .option('--dry-run', 'Preview changes without creating branches or PRs')
+    .option('--scan-only', 'Scan and generate reports without planning or applying fixes')
     .option('--skip-validation', 'Skip pre-flight validation checks')
-    .option('--scanner <type>', 'Scanner to use: snyk, npm-audit, pip-audit, or all', 'snyk')
-    .option('--severity <level>', 'Minimum severity to fix: low, medium, high, critical', 'high')
-    .option('--max-fixes <number>', 'Maximum number of fixes to apply', '1')
+    .addOption(
+        new Option('--scanner <type>', 'Scanner to use')
+            .choices(['snyk', 'npm-audit', 'pip-audit', 'all'])
+            .default('snyk')
+    )
+    .addOption(
+        new Option('--severity <level>', 'Minimum severity to fix')
+            .choices([...SEVERITY_LEVELS])
+            .default('high')
+    )
+    .option(
+        '--max-fixes <number>',
+        'Maximum number of fixes to apply (0 scans only)',
+        parseNonNegativeInteger,
+        1
+    )
+    .option(
+        '--scan-timeout <ms>',
+        'Timeout per scanner attempt in milliseconds',
+        parsePositiveInteger
+    )
     .option('--ci', 'Enable CI policy gates and non-zero exit codes on policy failure')
     .option('--approval-token <token>', 'Human approval token to allow risky remediations')
     .action(async (repository, options) => {
@@ -125,10 +145,11 @@ program
             const result = await runWarden({
                 targetPath,
                 repository: isRemote ? sanitizedRepo : undefined,
-                dryRun: options.dryRun || false,
+                dryRun: options.dryRun || options.scanOnly || false,
                 scanner: options.scanner,
                 minSeverity: options.severity,
-                maxFixes: parseInt(options.maxFixes, 10),
+                maxFixes: options.scanOnly ? 0 : options.maxFixes,
+                scanTimeoutMs: options.scanTimeout,
                 verbose: options.verbose || false,
                 ci: options.ci || false,
                 approvalToken: options.approvalToken,
@@ -161,6 +182,7 @@ program
 
                 if (result.reportPaths?.markdown || result.reportPaths?.html) {
                     logger.section('📝 Reports');
+                    if (result.reportPaths.sarif) logger.info(`SARIF: ${result.reportPaths.sarif}`);
                     if (result.reportPaths.markdown) {
                         logger.info(`Markdown: ${result.reportPaths.markdown}`);
                     }
@@ -194,6 +216,21 @@ program
             logger.error('Fatal error during scan', error);
             process.exit(1);
         }
+    });
+
+program
+    .command('export-sarif')
+    .description('Export a saved scan as SARIF 2.1.0 without rescanning')
+    .option('--input <path>', 'Saved scan JSON', SCAN_RESULTS_PATH)
+    .option('--output <path>', 'SARIF output path', 'scan-results/warden.sarif')
+    .action(async (options) => {
+        const { readScanResult } = await import('./utils/baseline');
+        const { writeSarifReport } = await import('./utils/sarif');
+        const output = writeSarifReport(
+            readScanResult(options.input),
+            path.resolve(options.output)
+        );
+        logger.success(`SARIF report written to ${output}`);
     });
 
 program
@@ -717,7 +754,7 @@ program
             const { runWarden } = await import('./orchestrator');
             await runWarden({
                 targetPath: process.cwd(),
-                dryRun: options.dryRun || false,
+                dryRun: options.dryRun || options.scanOnly || false,
                 scanner: 'snyk', // Not used in DAST mode
                 minSeverity: 'high',
                 maxFixes: 1,

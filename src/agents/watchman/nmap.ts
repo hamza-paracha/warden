@@ -4,15 +4,12 @@
  * Network discovery and security auditing using Nmap
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { runProcess } from '../../services/process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { parseStringPromise } from 'xml2js';
 import { logger } from '../../utils/logger';
 import { Vulnerability, ScanResult, NmapConfig, DastTarget } from '../../types';
-
-const execAsync = promisify(exec);
 
 export class NmapScanner {
     private config: NmapConfig;
@@ -30,7 +27,7 @@ export class NmapScanner {
      */
     async checkInstallation(): Promise<{ installed: boolean; version?: string }> {
         try {
-            const { stdout } = await execAsync('nmap --version');
+            const { stdout } = await runProcess('nmap', ['--version'], { timeout: 10000 });
             const versionMatch = stdout.match(/Nmap version ([0-9.]+)/);
             const version = versionMatch ? versionMatch[1] : 'unknown';
             logger.info(`Nmap detected: version ${version}`);
@@ -44,11 +41,11 @@ export class NmapScanner {
     /**
      * Build nmap command based on scan type and configuration
      */
-    private buildNmapCommand(xmlOutputPath: string): string {
+    private buildNmapArgs(xmlOutputPath: string): string[] {
         const url = new URL(this.target.url);
         const targetHost = url.hostname;
 
-        const baseCmd = ['nmap'];
+        const baseCmd: string[] = [];
 
         // Add scan type specific flags
         switch (this.config.scanType) {
@@ -86,7 +83,7 @@ export class NmapScanner {
         // Add target
         baseCmd.push(targetHost);
 
-        return baseCmd.join(' ');
+        return baseCmd;
     }
 
     /**
@@ -116,11 +113,11 @@ export class NmapScanner {
         const xmlOutputPath = path.join(this.outputDir, `nmap-${timestamp}.xml`);
 
         // Build and execute command
-        const command = this.buildNmapCommand(xmlOutputPath);
-        logger.info(`Executing Nmap scan: ${command}`);
+        const args = this.buildNmapArgs(xmlOutputPath);
+        logger.info(`Executing Nmap scan for ${this.target.url}`);
 
         try {
-            const { stderr } = await execAsync(command, {
+            const { stderr } = await runProcess('nmap', args, {
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer
             });
 

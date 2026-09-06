@@ -4,14 +4,11 @@
  * Penetration testing and vulnerability validation using Metasploit Framework
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { runProcess } from '../../services/process';
 import { promises as fs } from 'fs';
 import * as path from 'path';
 import { logger } from '../../utils/logger';
 import { Vulnerability, ScanResult, MetasploitConfig, DastTarget, SafetyConfig } from '../../types';
-
-const execAsync = promisify(exec);
 
 export class MetasploitScanner {
     private config: MetasploitConfig;
@@ -36,7 +33,7 @@ export class MetasploitScanner {
      */
     async checkInstallation(): Promise<{ installed: boolean; version?: string }> {
         try {
-            const { stdout } = await execAsync('msfconsole --version');
+            const { stdout } = await runProcess('msfconsole', ['--version'], { timeout: 10000 });
             const versionMatch =
                 stdout.match(/metasploit v([0-9.]+)/i) || stdout.match(/([0-9.]+)/);
             const version = versionMatch ? versionMatch[1] : 'unknown';
@@ -219,11 +216,11 @@ export class MetasploitScanner {
         try {
             // Execute Metasploit
             const timeout = this.config.timeout || 60000;
-            const command = `msfconsole -q -r ${resourceScriptPath} -o ${outputPath}`;
+            const args = ['-q', '-r', resourceScriptPath, '-o', outputPath];
 
-            logger.info(`Executing Metasploit: ${command}`);
+            logger.info(`Executing Metasploit for ${this.target.url}`);
 
-            await execAsync(command, {
+            await runProcess('msfconsole', args, {
                 timeout,
                 maxBuffer: 10 * 1024 * 1024, // 10MB buffer
             });

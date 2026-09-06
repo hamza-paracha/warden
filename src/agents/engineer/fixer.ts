@@ -178,7 +178,7 @@ export class NpmFixer implements IFixer {
             const originalPackageLock = packageLockExisted
                 ? fs.readFileSync(packageLockPath, 'utf-8')
                 : null;
-            const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+            const packageJson = JSON.parse(originalPackageJson);
             let updated = false;
 
             if (packageJson.dependencies?.[packageName] !== undefined) {
@@ -246,7 +246,10 @@ export class NpmFixer implements IFixer {
             }
 
             // 6. Commit
-            await this.git.stageAll();
+            await this.git.stageFiles([
+                'package.json',
+                ...(fs.existsSync(packageLockPath) ? ['package-lock.json'] : []),
+            ]);
             await this.git.commit(`fix(${packageName}): resolve ${vulnerabilityId}`);
 
             logger.success(`Fix committed on branch "${branchName}"`);
@@ -349,7 +352,7 @@ export class PipFixer implements IFixer {
                 logger.warn('No pytest suite detected. Skipping Python verification.');
             }
 
-            await this.git.stageAll();
+            await this.git.stageFiles(['requirements.txt']);
             await this.git.commit(`fix(${instruction.packageName}): resolve ${vulnerabilityId}`);
             logger.success(`Fix committed on branch "${branchName}"`);
             return true;

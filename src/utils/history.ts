@@ -1,3 +1,4 @@
+import { writeJsonAtomic } from '../services/artifacts';
 import * as fs from 'fs';
 import * as path from 'path';
 import { RunHistoryEntry, RunHistorySnapshot } from '../types';
@@ -19,7 +20,7 @@ export class RunHistoryService {
         const history = this.readAll();
         const previous = history[history.length - 1];
         history.push(entry);
-        fs.writeFileSync(this.historyPath, JSON.stringify(history, null, 2), 'utf-8');
+        writeJsonAtomic(this.historyPath, history);
 
         return {
             latest: entry,

@@ -46,6 +46,7 @@ export interface ScanResult {
     scanner?: ScannerType;
     projectPath?: string;
     scanMode?: ScanMode;
+    metadata?: { scanDuration?: number; retryCount?: number; errors?: string[] };
     scanMetadata?: {
         target?: string;
         scanType?: string;
@@ -130,6 +131,7 @@ export interface FixInstruction {
 
 export interface Diagnosis {
     vulnerabilityId: string;
+    packageName?: string;
     description: string;
     suggestedFix: string;
     filesToModify: string[];
@@ -200,6 +202,7 @@ export interface WardenOptions {
     dastTarget?: string;
     ci?: boolean;
     approvalToken?: string;
+    scanTimeoutMs?: number;
 }
 
 export interface WardenRunResult {
@@ -219,6 +222,7 @@ export interface WardenRunResult {
         html?: string;
         approvalRequest?: string;
         agentRunRecord?: string;
+        sarif?: string;
     };
     remediationPlan?: RemediationPlan;
     history?: RunHistorySnapshot;

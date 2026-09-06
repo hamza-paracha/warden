@@ -1,60 +1,41 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { runProcess } from '../../services/process';
+import { saveScanResult } from '../../services/artifacts';
+import { summarizeVulnerabilities } from '../../utils/scan-results';
 import { logger } from '../../utils/logger';
-import { SCAN_RESULTS_DIR, SCAN_RESULTS_FILE } from '../../constants';
 import { ScanResult, Vulnerability } from './snyk';
 
-const execAsync = promisify(exec);
-
 export class PipAuditScanner {
-    private outputDir: string;
+    private readonly projectPath: string;
 
-    constructor() {
-        const projectRoot = process.cwd();
-        this.outputDir = path.join(projectRoot, SCAN_RESULTS_DIR);
-
-        if (!fs.existsSync(this.outputDir)) {
-            fs.mkdirSync(this.outputDir, { recursive: true });
-        }
+    constructor(private readonly options: { projectPath?: string; timeoutMs?: number } = {}) {
+        this.projectPath = path.resolve(options.projectPath || process.cwd());
     }
 
     async scan(): Promise<ScanResult> {
         logger.watchman('Running pip-audit security scan...');
 
-        const requirementsPath = path.resolve(process.cwd(), 'requirements.txt');
+        const requirementsPath = path.resolve(this.projectPath, 'requirements.txt');
         if (!fs.existsSync(requirementsPath)) {
             throw new Error(
                 'requirements.txt not found. pip-audit support currently requires requirements.txt'
             );
         }
 
-        try {
-            await execAsync('python3 -m pip_audit --version', { maxBuffer: 1024 * 1024 });
-        } catch {
-            throw new Error(
-                'pip-audit is not installed. Install with: python3 -m pip install pip-audit'
-            );
-        }
-
-        let jsonOutput = '';
-        try {
-            const { stdout } = await execAsync(
-                'python3 -m pip_audit -r requirements.txt --format=json',
-                { maxBuffer: 10 * 1024 * 1024, cwd: process.cwd() }
-            );
-            jsonOutput = stdout;
-        } catch (error: any) {
-            if (error.stdout) {
-                jsonOutput = error.stdout;
-            } else {
-                throw error;
+        const { stdout: jsonOutput, durationMs } = await runProcess(
+            'python3',
+            ['-m', 'pip_audit', '-r', 'requirements.txt', '--format=json'],
+            {
+                cwd: this.projectPath,
+                timeout: this.options.timeoutMs,
+                allowedExitCodes: [0, 1],
             }
-        }
+        );
 
         const result = this.parseAuditOutput(jsonOutput);
-        this.saveScanResults(result);
+        result.metadata = { scanDuration: durationMs, retryCount: 0 };
+        saveScanResult(result, this.projectPath);
         return result;
     }
 
@@ -67,10 +48,16 @@ export class PipAuditScanner {
         }
 
         const vulnerabilities: Vulnerability[] = [];
-        const dependencies = Array.isArray(data.dependencies) ? data.dependencies : [];
+        if (!data || !Array.isArray(data.dependencies)) {
+            throw new Error('pip-audit did not return a dependency report');
+        }
+        const dependencies = data.dependencies;
 
         for (const dependency of dependencies) {
-            const vulns = Array.isArray(dependency.vulns) ? dependency.vulns : [];
+            if (!dependency || !Array.isArray(dependency.vulns)) {
+                throw new Error('pip-audit returned an incomplete dependency report');
+            }
+            const vulns = dependency.vulns;
             for (const vuln of vulns) {
                 const fixVersions = Array.isArray(vuln.fix_versions) ? vuln.fix_versions : [];
                 const aliases = Array.isArray(vuln.aliases) ? vuln.aliases : [];
@@ -88,43 +75,21 @@ export class PipAuditScanner {
             }
         }
 
-        const summary = {
-            total: vulnerabilities.length,
-            critical: vulnerabilities.filter(
-                (vulnerability) => vulnerability.severity === 'critical'
-            ).length,
-            high: vulnerabilities.filter((vulnerability) => vulnerability.severity === 'high')
-                .length,
-            medium: vulnerabilities.filter((vulnerability) => vulnerability.severity === 'medium')
-                .length,
-            low: vulnerabilities.filter((vulnerability) => vulnerability.severity === 'low').length,
-        };
+        const summary = summarizeVulnerabilities(vulnerabilities);
 
         return {
             timestamp: new Date().toISOString(),
             vulnerabilities,
             summary,
             scanner: 'pip-audit',
+            projectPath: this.projectPath,
         };
     }
 
     private inferSeverity(vuln: any): Vulnerability['severity'] {
-        const aliases = Array.isArray(vuln.aliases) ? vuln.aliases.join(' ') : '';
-        const description = `${vuln.description || ''} ${aliases}`.toLowerCase();
-
-        if (description.includes('critical')) return 'critical';
-        if (description.includes('high')) return 'high';
-        if (description.includes('low')) return 'low';
+        // Descriptions are not severity data (e.g. "overflow" contains "low").
+        const severity = String(vuln.severity || '').toLowerCase();
+        if (severity === 'critical' || severity === 'high' || severity === 'low') return severity;
         return 'medium';
-    }
-
-    private saveScanResults(result: ScanResult): void {
-        const timestamp = new Date().toISOString().replace(/:/g, '-');
-        const filepath = path.join(this.outputDir, `scan-${timestamp}.json`);
-        const latestPath = path.join(this.outputDir, SCAN_RESULTS_FILE);
-        const content = JSON.stringify(result, null, 2);
-
-        fs.writeFileSync(filepath, content, { encoding: 'utf-8' });
-        fs.writeFileSync(latestPath, content, { encoding: 'utf-8' });
     }
 }

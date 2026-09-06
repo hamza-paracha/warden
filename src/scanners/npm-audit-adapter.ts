@@ -18,6 +18,6 @@ export class NpmAuditScannerAdapter implements IScanner {
 
     async scan(): Promise<ScannerResult> {
         const result = await this.inner.scan();
-        return result as unknown as ScannerResult;
+        return result;
     }
 }

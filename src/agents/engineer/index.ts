@@ -79,10 +79,13 @@ export class EngineerAgent {
      * Each SAST diagnosis now carries a structured `fixInstruction` so that
      * `applyFix` never needs to parse a human-readable string via regex.
      */
-    async diagnose(scanResultsPath: string): Promise<Diagnosis[]> {
+    async diagnose(scanResultsPath: string | ScanResults): Promise<Diagnosis[]> {
         logger.engineer('Analyzing scan results...');
 
-        const scanResults = await this.readScanResults(scanResultsPath);
+        const scanResults =
+            typeof scanResultsPath === 'string'
+                ? await this.readScanResults(scanResultsPath)
+                : scanResultsPath;
 
         if (scanResults.scanMode === 'dast') {
             logger.info('DAST scan detected — generating advisory recommendations');
@@ -110,6 +113,7 @@ export class EngineerAgent {
 
             return {
                 vulnerabilityId: vuln.id,
+                packageName: vuln.packageName,
                 description: `${vuln.title} in ${vuln.packageName}@${vuln.version} (${vuln.severity.toUpperCase()})`,
                 // Human-readable string kept for display / logging purposes
                 suggestedFix: targetVersion
@@ -132,6 +136,7 @@ export class EngineerAgent {
         return prioritized.map(
             (vuln): Diagnosis => ({
                 vulnerabilityId: vuln.id,
+                packageName: vuln.packageName,
                 description: this.formatDastFinding(vuln),
                 suggestedFix: this.generateDastRemediation(vuln),
                 filesToModify: [],

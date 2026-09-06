@@ -67,3 +67,34 @@ describe('scan-results helpers', () => {
         });
     });
 });
+
+it('matches stable full sorting across large inputs, ties, thresholds, and limits', () => {
+    const ranks = { low: 1, medium: 2, high: 3, critical: 4 };
+    let seed = 42;
+    const input = Array.from({ length: 2000 }, (_, index) => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return {
+            ...vulnerabilities[(seed >>> 16) % vulnerabilities.length],
+            id: String(index),
+            cvssScore: seed % 11,
+        };
+    });
+    const snapshot = [...input];
+    for (const severity of ['low', 'medium', 'high', 'critical'] as const) {
+        for (const limit of [0, 1, 2, 10, 3000]) {
+            const expected = input
+                .filter((v) => ranks[v.severity] >= ranks[severity])
+                .sort(
+                    (a, b) =>
+                        ranks[b.severity] - ranks[a.severity] ||
+                        (b.cvssScore ?? 0) - (a.cvssScore ?? 0)
+                )
+                .slice(0, limit);
+            expect(selectVulnerabilitiesForFix(input, severity, limit)).toEqual(expected);
+        }
+    }
+    expect(input).toEqual(snapshot);
+});
+it.each([NaN, Infinity, -1, 1.5])('rejects invalid fix limit %s', (limit) => {
+    expect(() => selectVulnerabilitiesForFix(vulnerabilities, 'low', limit)).toThrow();
+});

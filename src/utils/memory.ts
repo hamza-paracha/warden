@@ -1,3 +1,4 @@
+import { writeJsonAtomic } from '../services/artifacts';
 import * as fs from 'fs';
 import * as path from 'path';
 import { MemoryHotspot, MemorySnapshot, ScanResult, Severity } from '../types';
@@ -49,7 +50,7 @@ export class MemoryService {
         }
 
         store[repoKey] = repoMemory;
-        fs.writeFileSync(this.memoryPath, JSON.stringify(store, null, 2), 'utf-8');
+        writeJsonAtomic(this.memoryPath, store);
 
         return {
             repoKey,

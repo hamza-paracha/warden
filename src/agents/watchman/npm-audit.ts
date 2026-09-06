@@ -1,12 +1,9 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import * as fs from 'fs';
-import * as path from 'path';
 import { ScanResult, Vulnerability } from './snyk';
 import { logger } from '../../utils/logger';
-import { SCAN_RESULTS_DIR, SCAN_RESULTS_FILE } from '../../constants';
-
-const execAsync = promisify(exec);
+import { runProcess } from '../../services/process';
+import { saveScanResult } from '../../services/artifacts';
+import { summarizeVulnerabilities } from '../../utils/scan-results';
+import * as path from 'path';
 
 const SEVERITY_MAPPING: Record<string, Vulnerability['severity']> = {
     critical: 'critical',
@@ -18,15 +15,10 @@ const SEVERITY_MAPPING: Record<string, Vulnerability['severity']> = {
 };
 
 export class NpmAuditScanner {
-    private outputDir: string;
+    private readonly projectPath: string;
 
-    constructor() {
-        const projectRoot = process.cwd();
-        this.outputDir = path.join(projectRoot, SCAN_RESULTS_DIR);
-
-        if (!fs.existsSync(this.outputDir)) {
-            fs.mkdirSync(this.outputDir, { recursive: true });
-        }
+    constructor(private readonly options: { projectPath?: string; timeoutMs?: number } = {}) {
+        this.projectPath = path.resolve(options.projectPath || process.cwd());
     }
 
     /**
@@ -58,9 +50,10 @@ export class NpmAuditScanner {
                         ? vuln.via[0].title
                         : 'Vulnerability found via npm audit',
                 severity,
-                packageName: vuln.name,
+                packageName: vuln.name || key,
+                ecosystem: 'npm',
                 version: vuln.range || 'unknown',
-                fixedIn: this.extractFixedVersions(vuln.fixAvailable),
+                fixedIn: this.extractFixedVersions(vuln.fixAvailable, vuln.name || key),
                 description: this.buildDescription(key, vuln),
                 cvssScore: undefined,
             });
@@ -69,7 +62,8 @@ export class NpmAuditScanner {
         return vulnerabilities;
     }
 
-    private extractFixedVersions(fixAvailable: any): string[] {
+    private extractFixedVersions(fixAvailable: any, packageName: string): string[] {
+        if (fixAvailable?.name && fixAvailable.name !== packageName) return [];
         if (!fixAvailable || fixAvailable === true || fixAvailable === false) {
             return [];
         }
@@ -82,7 +76,10 @@ export class NpmAuditScanner {
     }
 
     private buildDescription(packageKey: string, vuln: any): string {
-        const directFixVersion = this.extractFixedVersions(vuln.fixAvailable)[0];
+        const directFixVersion = this.extractFixedVersions(
+            vuln.fixAvailable,
+            vuln.name || packageKey
+        )[0];
         const fixHint = directFixVersion
             ? `Direct dependency can be upgraded to ${directFixVersion}.`
             : 'No direct package.json upgrade is available; manual or transitive remediation may be required.';
@@ -94,31 +91,26 @@ export class NpmAuditScanner {
         logger.watchman('Running npm audit fallback...');
 
         try {
-            // npm audit returns exit code 1 if vulnerabilities are found, so we need to handle that
-            let jsonOutput = '';
-            try {
-                const { stdout } = await execAsync('npm audit --json', {
-                    maxBuffer: 10 * 1024 * 1024,
-                });
-                jsonOutput = stdout;
-            } catch (error: any) {
-                // If the error code is 1, it just means vulns were found, which is fine.
-                // If it's something else, then it might be a real error.
-                if (error.stdout) {
-                    jsonOutput = error.stdout;
-                } else {
-                    throw error;
+            const { stdout: jsonOutput, durationMs } = await runProcess(
+                'npm',
+                ['audit', '--json'],
+                {
+                    cwd: this.projectPath,
+                    timeout: this.options.timeoutMs,
+                    allowedExitCodes: [0, 1],
                 }
-            }
-
-            return this.parseAuditOutput(jsonOutput);
+            );
+            const result = this.parseAuditOutput(jsonOutput);
+            result.metadata = { scanDuration: durationMs, retryCount: 0 };
+            saveScanResult(result, this.projectPath);
+            return result;
         } catch (error: any) {
             logger.error('npm audit failed', error);
             throw new Error(`npm audit scan failed: ${error.message}`);
         }
     }
 
-    private parseAuditOutput(jsonOutput: string): ScanResult {
+    parseAuditOutput(jsonOutput: string): ScanResult {
         let data: any;
         try {
             data = JSON.parse(jsonOutput);
@@ -130,7 +122,8 @@ export class NpmAuditScanner {
             !data ||
             data.error ||
             !data.vulnerabilities ||
-            typeof data.vulnerabilities !== 'object'
+            typeof data.vulnerabilities !== 'object' ||
+            Array.isArray(data.vulnerabilities)
         ) {
             throw new Error(
                 data?.error?.summary || 'npm audit did not return a vulnerability report'
@@ -138,38 +131,16 @@ export class NpmAuditScanner {
         }
 
         const vulnerabilities = this.formatVulnerabilities(data);
-        const summary = {
-            total: 0,
-            critical: 0,
-            high: 0,
-            medium: 0,
-            low: 0,
-        };
-
-        for (const vuln of vulnerabilities) {
-            summary.total++;
-            if (Object.hasOwn(summary, vuln.severity)) {
-                summary[vuln.severity]++;
-            }
-        }
+        const summary = summarizeVulnerabilities(vulnerabilities);
 
         const result = {
             timestamp: new Date().toISOString(),
             vulnerabilities,
             summary,
+            scanner: 'npm-audit',
+            projectPath: this.projectPath,
         };
 
-        this.saveScanResults(result);
         return result;
-    }
-
-    private saveScanResults(result: ScanResult): void {
-        const timestamp = new Date().toISOString().replace(/:/g, '-');
-        const filepath = path.join(this.outputDir, `scan-${timestamp}.json`);
-        const latestPath = path.join(this.outputDir, SCAN_RESULTS_FILE);
-        const content = JSON.stringify(result, null, 2);
-
-        fs.writeFileSync(filepath, content, { encoding: 'utf-8' });
-        fs.writeFileSync(latestPath, content, { encoding: 'utf-8' });
     }
 }

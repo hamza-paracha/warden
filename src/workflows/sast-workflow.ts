@@ -7,22 +7,19 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
+import { runProcess } from '../services/process';
+import { GIT_TIMEOUT_MS } from '../constants';
 
 import { IWorkflow } from './index';
 import { Diagnosis, ScanResult, Severity, WardenOptions, WardenRunResult } from '../types';
+import { ScannerRegistry } from '../scanners';
 import { SnykScanner } from '../agents/watchman/snyk';
 import { NpmAuditScanner } from '../agents/watchman/npm-audit';
 import { PipAuditScanner } from '../agents/watchman/pip-audit';
 import { ProgressReporter } from '../utils/progress';
 import { logger } from '../utils/logger';
 import { getConfig } from '../utils/config';
-import {
-    DEFAULT_BRANCH_PREFIX,
-    SCAN_RESULTS_DIR,
-    SCAN_RESULTS_FILE,
-    WORKSPACES_DIR,
-} from '../constants';
+import { DEFAULT_BRANCH_PREFIX, WORKSPACES_DIR } from '../constants';
 import { selectVulnerabilitiesForFix } from '../utils/scan-results';
 import { validator } from '../utils/validator';
 import { buildRemediationPlan } from '../utils/advisor';
@@ -113,12 +110,17 @@ export class SastWorkflow implements IWorkflow {
             if (fs.existsSync(workspacePath)) {
                 this.progress.updateStep('workspace', `Updating ${repoName}...`);
                 logger.debug(`Workspace for ${repoName} already exists. Pulling latest changes...`);
-                execSync(`git -C ${workspacePath} pull`, { stdio: 'pipe' });
+                await runProcess('git', ['pull', '--ff-only'], {
+                    cwd: workspacePath,
+                    timeout: GIT_TIMEOUT_MS,
+                });
             } else {
                 this.progress.updateStep('workspace', `Cloning ${repoName}...`);
                 logger.debug(`Cloning ${repoUrl} into workspaces/${repoName}...`);
                 fs.mkdirSync(path.dirname(workspacePath), { recursive: true });
-                execSync(`git clone ${repoUrl} ${workspacePath}`, { stdio: 'pipe' });
+                await runProcess('git', ['clone', '--', repoUrl, workspacePath], {
+                    timeout: GIT_TIMEOUT_MS,
+                });
             }
 
             this.progress.succeedStep('workspace', `Workspace ready: ${workspacePath}`);
@@ -130,57 +132,40 @@ export class SastWorkflow implements IWorkflow {
     }
 
     private async runSecurityScan(options: WardenOptions): Promise<ScanResult> {
-        const projectType = validator.detectProjectType(process.cwd());
-        const snykScanner = new SnykScanner();
-        const npmAuditScanner = new NpmAuditScanner();
-        const pipAuditScanner = new PipAuditScanner();
-
-        if (options.scanner === 'pip-audit') {
-            logger.info('Using pip-audit scanner (user specified)');
-            return pipAuditScanner.scan() as unknown as Promise<ScanResult>;
+        const config = getConfig().get('scanner');
+        const timeoutMs = options.scanTimeoutMs ?? config.timeout;
+        const registry = new ScannerRegistry();
+        const available = {
+            snyk: () => new SnykScanner({ timeoutMs, maxRetries: config.retries }).test(),
+            'npm-audit': () => new NpmAuditScanner({ timeoutMs }).scan(),
+            'pip-audit': () => new PipAuditScanner({ timeoutMs }).scan(),
+        };
+        const primary =
+            options.scanner === 'npm-audit' || options.scanner === 'pip-audit'
+                ? options.scanner
+                : validator.detectProjectType(process.cwd()) === 'python'
+                  ? 'pip-audit'
+                  : 'snyk';
+        registry.register({ name: primary, scan: available[primary] });
+        if (
+            config.fallback !== false &&
+            (options.scanner === 'snyk' || options.scanner === 'all')
+        ) {
+            const fallback = primary === 'pip-audit' ? 'snyk' : 'npm-audit';
+            registry.register({ name: fallback, scan: available[fallback] });
         }
-
-        if (options.scanner === 'npm-audit') {
-            logger.info('Using npm-audit scanner (user specified)');
-            return npmAuditScanner.scan() as unknown as Promise<ScanResult>;
-        }
-
-        if (projectType === 'python') {
-            try {
-                return await (pipAuditScanner.scan() as unknown as Promise<ScanResult>);
-            } catch (pipAuditError: any) {
-                logger.warn(`pip-audit scan failed: ${pipAuditError.message}`);
-                if (options.scanner === 'all' || options.scanner === 'snyk') {
-                    logger.info('Falling back to Snyk scanner...');
-                    return await (snykScanner.test() as unknown as Promise<ScanResult>);
-                }
-                throw pipAuditError;
-            }
-        }
-
-        if (options.scanner === 'snyk' || options.scanner === 'all') {
-            try {
-                return await (snykScanner.test() as unknown as Promise<ScanResult>);
-            } catch (snykError: any) {
-                logger.warn(`Snyk scan failed: ${snykError.message}`);
-                logger.info('Falling back to npm-audit scanner...');
-
-                try {
-                    const result = await (npmAuditScanner.scan() as unknown as Promise<ScanResult>);
-                    logger.success('npm-audit fallback scan completed');
-                    return result;
-                } catch (npmError: any) {
-                    logger.error(`npm-audit fallback also failed: ${npmError.message}`);
-                    throw new Error('All scanners failed. Please check your environment.');
-                }
-            }
-        }
-
-        try {
-            return await (snykScanner.test() as unknown as Promise<ScanResult>);
-        } catch {
-            return npmAuditScanner.scan() as unknown as Promise<ScanResult>;
-        }
+        const scanned = await registry.scan(primary);
+        return {
+            ...scanned,
+            scanner: scanned.scanner as ScanResult['scanner'],
+            scanMode: 'sast',
+            projectPath: process.cwd(),
+            vulnerabilities: scanned.vulnerabilities.map((finding) => ({
+                ...finding,
+                fixedIn: finding.fixedIn || [],
+                description: finding.description || '',
+            })),
+        };
     }
 
     private async orchestrateFix(
@@ -248,20 +233,28 @@ export class SastWorkflow implements IWorkflow {
         logger.section('🔧 ENGINEER AGENT | Diagnosing & Patching');
 
         const { EngineerAgent } = await import('../agents/engineer');
-        const { DiplomatAgent } = await import('../agents/diplomat');
         const engineer = new EngineerAgent();
-        const diplomat = new DiplomatAgent();
         const warnings: string[] = [];
         const branches: string[] = [];
         const pullRequestUrls: string[] = [];
 
-        const resultsPath = path.resolve(process.cwd(), SCAN_RESULTS_DIR, SCAN_RESULTS_FILE);
-        const diagnoses = await engineer.diagnose(resultsPath);
+        const diagnoses = await engineer.diagnose({ ...scanResult, vulnerabilities: selected });
         const diagnosisById = new Map<string, Diagnosis>(
-            diagnoses.map((diagnosis: Diagnosis) => [diagnosis.vulnerabilityId, diagnosis])
+            diagnoses.map((diagnosis: Diagnosis) => [
+                JSON.stringify([
+                    diagnosis.vulnerabilityId,
+                    diagnosis.packageName || diagnosis.fixInstruction?.packageName || '',
+                ]),
+                diagnosis,
+            ])
         );
         const actionableDiagnoses = selected
-            .map((vulnerability) => diagnosisById.get(vulnerability.id))
+            .map(
+                (vulnerability) =>
+                    diagnosisById.get(
+                        JSON.stringify([vulnerability.id, vulnerability.packageName])
+                    ) || diagnosisById.get(JSON.stringify([vulnerability.id, '']))
+            )
             .filter((diagnosis): diagnosis is Diagnosis => Boolean(diagnosis));
 
         if (actionableDiagnoses.length === 0) {
@@ -295,6 +288,9 @@ export class SastWorkflow implements IWorkflow {
             };
         }
 
+        const diplomat = process.env.GITHUB_TOKEN
+            ? new (await import('../agents/diplomat')).DiplomatAgent()
+            : undefined;
         let appliedFixes = 0;
 
         for (const diagnosis of actionableDiagnoses) {
@@ -313,7 +309,7 @@ export class SastWorkflow implements IWorkflow {
                 : `${DEFAULT_BRANCH_PREFIX}-${diagnosis.vulnerabilityId.toLowerCase()}`;
             branches.push(branchName);
 
-            if (!process.env.GITHUB_TOKEN) {
+            if (!diplomat) {
                 warnings.push(
                     `Skipped PR creation for ${diagnosis.vulnerabilityId}: GITHUB_TOKEN is not set.`
                 );
@@ -330,7 +326,10 @@ export class SastWorkflow implements IWorkflow {
 
             try {
                 const matched = selected.find(
-                    (vulnerability) => vulnerability.id === diagnosis.vulnerabilityId
+                    (vulnerability) =>
+                        vulnerability.id === diagnosis.vulnerabilityId &&
+                        vulnerability.packageName ===
+                            (diagnosis.packageName || diagnosis.fixInstruction?.packageName)
                 );
                 const prUrl = await diplomat.createPullRequest({
                     branch: branchName,

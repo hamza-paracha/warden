@@ -1,3 +1,6 @@
+import { writeJsonAtomic } from './services/artifacts';
+import { writeSarifReport } from './utils/sarif';
+import { validateRunOptions } from './utils/run-options';
 /**
  * Warden Orchestrator
  *
@@ -12,13 +15,10 @@
  * branch here.
  */
 
-import * as fs from 'fs';
 import * as path from 'path';
 import { loadRules } from './core/rules';
 import { loadSpecs } from './core/spec';
 import { logger } from './utils/logger';
-import { SastWorkflow } from './workflows/sast-workflow';
-import { DastWorkflow } from './workflows/dast-workflow';
 import { WardenOptions, WardenRunResult } from './types';
 import { buildRemediationPlan, createHistoryEntry } from './utils/advisor';
 import { RunHistoryService } from './utils/history';
@@ -41,6 +41,7 @@ export type { WardenOptions };
  * @param options  Top-level configuration for this run.
  */
 export async function runWarden(options: WardenOptions): Promise<WardenRunResult> {
+    validateRunOptions(options);
     // ── 1. Load Core Configuration ────────────────────────────────────────────
     logger.section('📋 Loading Configuration');
 
@@ -56,17 +57,16 @@ export async function runWarden(options: WardenOptions): Promise<WardenRunResult
     // ── 2. Select and execute the appropriate workflow ────────────────────────
     const workflowResult =
         options.scanMode === 'dast'
-            ? await new DastWorkflow().run(options)
-            : await new SastWorkflow().run(options);
+            ? await new (await import('./workflows/dast-workflow')).DastWorkflow().run(options)
+            : await new (await import('./workflows/sast-workflow')).SastWorkflow().run(options);
 
     const originalCwd = process.cwd();
     try {
         process.chdir(workflowResult.targetPath);
         if (workflowResult.scanResult) {
-            fs.mkdirSync('scan-results', { recursive: true });
-            fs.writeFileSync(
+            writeJsonAtomic(
                 path.join('scan-results', 'scan-results.json'),
-                JSON.stringify(workflowResult.scanResult, null, 2)
+                workflowResult.scanResult
             );
             const remediationPlan = buildRemediationPlan(workflowResult.scanResult, workflowResult);
             workflowResult.remediationPlan = remediationPlan;
@@ -81,6 +81,7 @@ export async function runWarden(options: WardenOptions): Promise<WardenRunResult
             workflowResult.policyDecision = policyDecision;
 
             workflowResult.reportPaths = {
+                sarif: writeSarifReport(workflowResult.scanResult),
                 markdown: writeMarkdownReport(
                     workflowResult.scanResult,
                     workflowResult,
