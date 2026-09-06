@@ -67,11 +67,11 @@
   "license": "ISC",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/DevDonzo/warden.git"
+    "url": "git+https://github.com/hamza-paracha/warden.git"
   },
   "homepage": "https://warden.hamzaparacha.me",
   "bugs": {
-    "url": "https://github.com/DevDonzo/warden/issues"
+    "url": "https://github.com/hamza-paracha/warden/issues"
   },
   "type": "commonjs",
   "dependencies": {
