@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Warden - Autonomous Security Orchestration</title>
+    <meta name="description"
+        content="Warden: Autonomous SRE & Security Orchestration Agent. Automatically scan, fix, and patch security vulnerabilities in your repositories.">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="main-wrapper">
+        <nav class="nav">
+            <div class="nav-brand">Warden</div>
+            <div class="nav-links">
+                <button class="release-trigger" id="release-trigger" type="button" hidden>What's new <span>1.9</span></button>
+                <a href="https://github.com/hamza-paracha/warden" target="_blank" rel="noopener">GitHub</a>
+                <a href="https://www.npmjs.com/package/@devdonzo/warden" target="_blank">npm</a>
+            </div>
+        </nav>
+
+        <main class="hero">
+            <h1 class="title">Security orchestration<br><span class="highlight">while you sleep.</span></h1>
+
+            <p class="subtitle">
+                The Council of Agents that patrols your codebase. <br>
+                Autonomous scanning, patching, and verification.
+            </p>
+
+            <div class="install-container">
+                <div class="install-header">
+                    <span class="active-tab">Global Install</span>
+                </div>
+                <div class="code-box">
+                    <code>npm install -g @devdonzo/warden</code>
+                    <button class="copy-btn" id="copy-btn" aria-label="Copy to clipboard">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="compatibility-note">
+                    Compatible with macOS, Linux, and Windows
+                </div>
+            </div>
+
+            <div class="features-grid">
+                <div class="feature-item">
+                    <div class="feature-icon">👁️</div>
+                    <h3>The Watchman</h3>
+                    <p>Deep dependency scanning powered by Snyk.</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🔧</div>
+                    <h3>The Engineer</h3>
+                    <p>Auto-generates fix branches and verifies patches.</p>
+                </div>
+                <div class="feature-item">
+                    <div class="feature-icon">🤝</div>
+                    <h3>The Diplomat</h3>
+                    <p>Opens detailed, semantic Pull Requests.</p>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <p>© 2026 DevDonzo. Released under ISC License.</p>
+            <p class="author-credit">
+                Author: <a href="https://www.linkedin.com/in/hamza-paracha-03a091266/" target="_blank">Hamza Paracha</a>
+            </p>
+        </footer>
+    </div>
+
+    <dialog class="release-modal" id="release-modal" aria-labelledby="release-title" aria-describedby="release-intro">
+        <button class="release-close" id="release-close" type="button" aria-label="Close what's new" autofocus>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                <path d="m6 6 12 12M18 6 6 18"></path>
+            </svg>
+        </button>
+        <p class="release-eyebrow">THE LATEST FROM WARDEN <span>v1.9.0</span></p>
+        <h2 id="release-title">A faster patrol.<br>A little more control.</h2>
+        <p class="release-intro" id="release-intro">Meet the latest updates to your codebase's watchman.</p>
+        <div class="release-performance">
+            <span class="release-metric">9×<small>UP TO</small></span>
+            <div>
+                <h3>Faster vulnerability prioritization</h3>
+                <p>Get to the findings that matter, sooner.</p>
+            </div>
+        </div>
+        <ul class="release-features">
+            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Scan on your terms</h3><p>Scan-only mode and configurable scanner timeouts.</p></div></li>
+            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Reports that travel</h3><p>Export SARIF reports for your CI workflow, even from saved scans.</p></div></li>
+            <li><span class="release-dot" aria-hidden="true"></span><div><h3>More reliable results</h3><p>Stricter failure handling, safer fixes, and a lighter install.</p></div></li>
+        </ul>
+        <p class="release-benchmark">Prioritization benchmark: 100,000 findings. Total scan speed depends on your scanner and network.</p>
+        <div class="release-actions">
+            <a href="https://github.com/hamza-paracha/warden/releases/tag/v1.9.0" target="_blank" rel="noopener">Full release notes <span aria-hidden="true">↗</span></a>
+            <button id="release-dismiss" type="button">Got it</button>
+        </div>
+    </dialog>
+    <script src="script.js"></script>
+</body>
+
+</html>
