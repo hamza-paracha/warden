@@ -14,36 +14,51 @@ export function buildRemediationPlan(
     scanResult: ScanResult,
     runResult: Pick<WardenRunResult, 'appliedFixes' | 'attemptedFixes' | 'warnings'>
 ): RemediationPlan {
-    const autoFixable = scanResult.vulnerabilities.filter(
-        (vulnerability) => vulnerability.fixedIn.length > 0
-    );
-    const manual = scanResult.vulnerabilities.filter(
-        (vulnerability) => vulnerability.fixedIn.length === 0
-    );
-    const exploitCount = scanResult.vulnerabilities.filter(
-        (vulnerability) => vulnerability.exploitAvailable
-    ).length;
-    const riskScore = calculateRiskScore(scanResult);
+    let autoFixableCount = 0;
+    let manualCount = 0;
+    let exploitCount = 0;
+    let weightedRisk = 0;
+    // Only six distinct manual packages are shown; do not retain every finding.
+    const manualPackages = new Set<string>();
+    for (const vulnerability of scanResult.vulnerabilities) {
+        if (vulnerability.fixedIn.length > 0) {
+            autoFixableCount++;
+        } else {
+            manualCount++;
+            if (manualPackages.size < 6 && vulnerability.packageName) {
+                manualPackages.add(vulnerability.packageName);
+            }
+        }
+        if (vulnerability.exploitAvailable) exploitCount++;
+        weightedRisk += findingRisk(vulnerability);
+    }
+    const riskScore = Math.min(100, weightedRisk);
     const posture = classifyPosture(riskScore);
-
     const immediateActions = buildImmediateActions(
         scanResult,
-        autoFixable.length,
-        runResult.appliedFixes
+        autoFixableCount,
+        runResult.appliedFixes,
+        exploitCount
     );
-    const manualFollowUps = buildManualFollowUps(manual);
-    const strategicImprovements = buildStrategicImprovements(scanResult, runResult.warnings);
+    const manualFollowUps = [...manualPackages].map(
+        (packageName) => `Investigate manual remediation path for ${packageName}`
+    );
+    const strategicImprovements = buildStrategicImprovements(
+        scanResult,
+        runResult.warnings,
+        manualCount
+    );
 
     return {
         riskScore,
         posture,
-        autoFixableCount: autoFixable.length,
-        manualCount: manual.length,
+        autoFixableCount,
+        manualCount,
         exploitCount,
         immediateActions,
         manualFollowUps,
         strategicImprovements,
-        summary: buildSummary(scanResult, autoFixable.length, manual.length, exploitCount, posture),
+        summary: buildSummary(scanResult, autoFixableCount, manualCount, exploitCount, posture),
     };
 }
 
@@ -72,15 +87,20 @@ export function createHistoryEntry(
     };
 }
 
-function calculateRiskScore(scanResult: ScanResult): number {
-    const weightedSum = scanResult.vulnerabilities.reduce((total, vulnerability) => {
-        const base = SEVERITY_PRIORITY[vulnerability.severity] * 20;
-        const cvssWeight = vulnerability.cvssScore ? Math.round(vulnerability.cvssScore * 3) : 0;
-        const exploitWeight = vulnerability.exploitAvailable ? 25 : 0;
-        return total + base + cvssWeight + exploitWeight;
-    }, 0);
+/** Shared by plans, history, and baselines without building unused advice. */
+export function calculateRiskScore(scanResult: ScanResult): number {
+    let weightedRisk = 0;
+    for (const vulnerability of scanResult.vulnerabilities) {
+        weightedRisk += findingRisk(vulnerability);
+    }
+    return Math.min(100, weightedRisk);
+}
 
-    return Math.min(100, weightedSum);
+function findingRisk(vulnerability: ScanResult['vulnerabilities'][number]): number {
+    const base = SEVERITY_PRIORITY[vulnerability.severity] * 20;
+    const cvssWeight = vulnerability.cvssScore ? Math.round(vulnerability.cvssScore * 3) : 0;
+    const exploitWeight = vulnerability.exploitAvailable ? 25 : 0;
+    return base + cvssWeight + exploitWeight;
 }
 
 function classifyPosture(riskScore: number): RemediationPlan['posture'] {
@@ -93,7 +113,8 @@ function classifyPosture(riskScore: number): RemediationPlan['posture'] {
 function buildImmediateActions(
     scanResult: ScanResult,
     autoFixableCount: number,
-    appliedFixes: number
+    appliedFixes: number,
+    exploitCount: number
 ): RemediationAction[] {
     const actions: RemediationAction[] = [];
     const highestSeverity = FIXABLE_PRIORITIES.find((severity) => scanResult.summary[severity] > 0);
@@ -114,7 +135,7 @@ function buildImmediateActions(
         });
     }
 
-    if (scanResult.vulnerabilities.some((vulnerability) => vulnerability.exploitAvailable)) {
+    if (exploitCount > 0) {
         actions.push({
             title: 'Escalate exploit-backed findings to incident priority',
             priority: 'urgent',
@@ -126,25 +147,18 @@ function buildImmediateActions(
     return actions.slice(0, 4);
 }
 
-function buildManualFollowUps(manualVulnerabilities: ScanResult['vulnerabilities']): string[] {
-    const packages = [
-        ...new Set(
-            manualVulnerabilities.map((vulnerability) => vulnerability.packageName).filter(Boolean)
-        ),
-    ];
-    return packages
-        .slice(0, 6)
-        .map((packageName) => `Investigate manual remediation path for ${packageName}`);
-}
-
-function buildStrategicImprovements(scanResult: ScanResult, warnings: string[]): string[] {
+function buildStrategicImprovements(
+    scanResult: ScanResult,
+    warnings: string[],
+    manualCount: number
+): string[] {
     const improvements: string[] = [];
 
     if (scanResult.summary.high + scanResult.summary.critical > 0) {
         improvements.push('Add Warden to CI so high and critical findings fail fast before merge.');
     }
 
-    if (scanResult.vulnerabilities.some((vulnerability) => vulnerability.fixedIn.length === 0)) {
+    if (manualCount > 0) {
         improvements.push(
             'Track transitive dependencies and vendor advisories so manual-only issues are not orphaned.'
         );

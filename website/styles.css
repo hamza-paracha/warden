@@ -124,19 +124,24 @@ body {
 }
 
 .code-box code {
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.95rem;
     color: var(--text-primary);
 }
 
 .copy-btn {
+    flex-shrink: 0;
+    min-width: 44px;
+    min-height: 44px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
     cursor: pointer;
     padding: 8px;
     border-radius: 6px;
-    transition: all 0.2s;
+    transition: background-color 0.2s, color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -326,4 +331,27 @@ body {
     .code-box { gap: 4px; padding: 12px; }
     .code-box code { font-size: 0.72rem; }
     .install-container { padding: 0; }
+}
+
+.copy-btn.is-copied { color: #15803d; }
+.copy-btn:disabled { cursor: wait; }
+.copy-btn:focus-visible, .nav-links a:focus-visible, .author-credit a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+}
+.copy-status {
+    min-height: 1.5em;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+/* Features remain visible without JavaScript or observer support. */
+@media (prefers-reduced-motion: no-preference) {
+    .feature-item { animation: feature-in 400ms ease-out both; }
+    .feature-item:nth-child(2) { animation-delay: 80ms; }
+    .feature-item:nth-child(3) { animation-delay: 160ms; }
+}
+@keyframes feature-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
 }

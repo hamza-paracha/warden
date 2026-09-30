@@ -26,7 +26,7 @@ export class MemoryService {
 
     update(repoKey: string, scanResult: ScanResult): MemorySnapshot {
         const store = this.readStore();
-        const repoMemory = store[repoKey] || { runCount: 0, packages: {} };
+        const repoMemory = store[repoKey] || { runCount: 0, packages: Object.create(null) };
         repoMemory.runCount += 1;
 
         for (const vulnerability of scanResult.vulnerabilities) {
@@ -78,15 +78,45 @@ export class MemoryService {
 
     private readStore(): MemoryStore {
         if (!fs.existsSync(this.memoryPath)) {
-            return {};
+            return Object.create(null);
         }
 
         try {
             const content = fs.readFileSync(this.memoryPath, 'utf-8');
-            const parsed = JSON.parse(content);
-            return parsed && typeof parsed === 'object' ? parsed : {};
+            const parsed: unknown = JSON.parse(content);
+            const store: MemoryStore = Object.create(null);
+            if (!isRecord(parsed)) return store;
+            for (const [repoKey, value] of Object.entries(parsed)) {
+                if (!isRecord(value) || !isCount(value.runCount) || !isRecord(value.packages)) {
+                    continue;
+                }
+                const packages: MemoryStore[string]['packages'] = Object.create(null);
+                for (const [packageName, entry] of Object.entries(value.packages)) {
+                    if (
+                        isRecord(entry) &&
+                        isCount(entry.occurrences) &&
+                        typeof entry.lastSeverity === 'string' &&
+                        Object.hasOwn(SEVERITY_PRIORITY, entry.lastSeverity)
+                    ) {
+                        packages[packageName] = {
+                            occurrences: entry.occurrences,
+                            lastSeverity: entry.lastSeverity as Severity,
+                        };
+                    }
+                }
+                store[repoKey] = { runCount: value.runCount, packages };
+            }
+            return store;
         } catch {
-            return {};
+            return Object.create(null);
         }
     }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isCount(value: unknown): value is number {
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 }

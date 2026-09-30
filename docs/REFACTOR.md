@@ -75,3 +75,27 @@ Real registry latency, authenticated GitHub PR creation, and live DAST scans are
 outside the offline test coverage.
 
 SARIF follows the [OASIS 2.1.0 specification](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html).
+
+## September 2026 follow-up
+
+- Remediation plans aggregate counts, risk, and the first six distinct manual
+  packages in one pass, without arrays containing every fixable/manual finding.
+  Baselines call the shared risk scorer directly instead of building unused advice.
+- Baseline files now use atomic replacement; a failed replacement preserves the
+  previous baseline and removes the temporary file.
+- History compares the latest matching repository (or local target path) and scan
+  mode. Risk changes take precedence over finding count changes, so fewer findings
+  cannot mask increased risk. Malformed saved entries are skipped.
+- Memory dictionaries accept literal keys such as `__proto__` and `constructor`
+  without inheriting object properties. Saved counters and severity values are
+  validated before use; valid neighboring entries survive malformed data.
+- The website handles clipboard rejection, announces copy status, and keeps
+  feature content visible with JavaScript unavailable or reduced motion enabled.
+
+For remediation-plan measurements, build and run
+`node scripts/benchmark-advisor.js`. To compare a refactor, save the previous
+`dist/utils/advisor.js` outside the build directory before rebuilding, then pass
+its path as the argument. The benchmark checks identical full plan output and
+reports warmed median timings over 25 samples for 100,000 findings. On the
+current development machine, the old plan took 7.214 ms and the new plan 0.841 ms
+(8.58× faster). This measures CPU plan generation only, not total scan time.

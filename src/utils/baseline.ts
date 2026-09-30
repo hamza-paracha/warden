@@ -10,7 +10,8 @@ import {
     WardenBaseline,
 } from '../types';
 import { SCAN_RESULTS_PATH, SEVERITY_PRIORITY, WARDEN_BASELINE_FILE } from '../constants';
-import { buildRemediationPlan } from './advisor';
+import { calculateRiskScore } from './advisor';
+import { writeJsonAtomic } from '../services/artifacts';
 import { isSeverityAtLeast } from './scan-results';
 
 export function readScanResult(scanResultsPath: string = SCAN_RESULTS_PATH): ScanResult {
@@ -51,13 +52,7 @@ export function writeBaseline(
 ): WardenBaseline {
     const resolvedPath = path.resolve(baselinePath);
     const baseline = createBaselineSnapshot(scanResult);
-    const directory = path.dirname(resolvedPath);
-
-    if (!fs.existsSync(directory)) {
-        fs.mkdirSync(directory, { recursive: true });
-    }
-
-    fs.writeFileSync(resolvedPath, JSON.stringify(baseline, null, 2), 'utf-8');
+    writeJsonAtomic(resolvedPath, baseline);
     return baseline;
 }
 
@@ -70,7 +65,7 @@ export function createBaselineSnapshot(scanResult: ScanResult): WardenBaseline {
         scanMode: scanResult.scanMode,
         projectPath: scanResult.projectPath,
         summary: scanResult.summary,
-        riskScore: riskScoreFor(scanResult),
+        riskScore: calculateRiskScore(scanResult),
         findings: scanResult.vulnerabilities
             .map(vulnerabilityToBaselineFinding)
             .sort((left, right) => left.fingerprint.localeCompare(right.fingerprint)),
@@ -126,7 +121,7 @@ export function compareBaseline(
         }
     }
 
-    const currentRiskScore = riskScoreFor(currentScan);
+    const currentRiskScore = calculateRiskScore(currentScan);
 
     return {
         generatedAt: new Date().toISOString(),
@@ -218,14 +213,6 @@ function sortDeltas(deltas: BaselineFindingDelta[]): BaselineFindingDelta[] {
 
         return left.fingerprint.localeCompare(right.fingerprint);
     });
-}
-
-function riskScoreFor(scanResult: ScanResult): number {
-    return buildRemediationPlan(scanResult, {
-        appliedFixes: 0,
-        attemptedFixes: 0,
-        warnings: [],
-    }).riskScore;
 }
 
 function isScanResult(value: unknown): value is ScanResult {

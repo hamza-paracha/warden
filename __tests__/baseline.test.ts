@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import {
@@ -134,4 +134,23 @@ describe('baseline', () => {
             fs.rmSync(tempDir, { recursive: true, force: true });
         }
     });
+});
+
+it('preserves the previous baseline when atomic replacement fails', () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'warden-baseline-atomic-'));
+    const filename = path.join(directory, 'baseline.json');
+    const initial = writeBaseline(scanResult(), filename);
+    const rename = jest.spyOn(fs, 'renameSync').mockImplementation(() => {
+        throw new Error('disk failure');
+    });
+    try {
+        expect(() => writeBaseline(scanResult({ vulnerabilities: [] }), filename)).toThrow(
+            'disk failure'
+        );
+        expect(readBaseline(filename)).toEqual(initial);
+        expect(fs.readdirSync(directory)).toEqual(['baseline.json']);
+    } finally {
+        rename.mockRestore();
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
 });
