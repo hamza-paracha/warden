@@ -23,8 +23,8 @@ export function renderWardenBanner(version?: string): string {
         '',
         ...BANNER_LINES.map((line) => frame(line)),
         `${title('        W A R D E N')}${versionLabel}`,
-        dim('   autonomous security command center'),
-        accent('   scan  |  baseline  |  remediate  |  report'),
+        dim('   dependency security and verification'),
+        accent('   scan  |  verify  |  baseline  |  report'),
         '',
     ].join('\n');
 }

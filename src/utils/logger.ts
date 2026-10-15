@@ -9,7 +9,7 @@ export enum LogLevel {
 }
 
 class Logger {
-    private winstonLogger: winston.Logger;
+    private winstonLogger?: winston.Logger;
     private verboseMode: boolean = false;
     private quietMode: boolean = false;
 
@@ -29,9 +29,11 @@ class Logger {
         return `${minutes}m ${remainingSeconds}s`;
     }
 
-    constructor() {
+    // Importing the CLI must not create logs in a repository being verified.
+    private getLogger(): winston.Logger {
+        if (this.winstonLogger) return this.winstonLogger;
         this.winstonLogger = winston.createLogger({
-            level: 'info',
+            level: this.verboseMode ? 'debug' : 'info',
             format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
             transports: [
                 new winston.transports.File({
@@ -45,11 +47,12 @@ class Logger {
                 }),
             ],
         });
+        return this.winstonLogger;
     }
 
     setVerbose(verbose: boolean) {
         this.verboseMode = verbose;
-        this.winstonLogger.level = verbose ? 'debug' : 'info';
+        if (this.winstonLogger) this.winstonLogger.level = verbose ? 'debug' : 'info';
     }
 
     setQuiet(quiet: boolean) {
@@ -87,9 +90,9 @@ class Logger {
 
         if (error) {
             console.error(chalk.red(error.stack || error.message));
-            this.winstonLogger.error(message, { error: error.message, stack: error.stack });
+            this.getLogger().error(message, { error: error.message, stack: error.stack });
         } else {
-            this.winstonLogger.error(message);
+            this.getLogger().error(message);
         }
     }
 
@@ -98,7 +101,7 @@ class Logger {
         if (!this.quietMode) {
             console.warn(formattedMsg);
         }
-        this.winstonLogger.warn(message);
+        this.getLogger().warn(message);
     }
 
     info(message: string, prefix?: string) {
@@ -106,7 +109,7 @@ class Logger {
         if (!this.quietMode) {
             console.log(formattedMsg);
         }
-        this.winstonLogger.info(message);
+        this.getLogger().info(message);
     }
 
     debug(message: string, prefix?: string) {
@@ -114,7 +117,7 @@ class Logger {
             const formattedMsg = this.formatMessage('debug', message, prefix);
             console.log(formattedMsg);
         }
-        this.winstonLogger.debug(message);
+        this.getLogger().debug(message);
     }
 
     success(message: string, prefix?: string) {
@@ -122,7 +125,7 @@ class Logger {
         if (!this.quietMode) {
             console.log(formattedMsg);
         }
-        this.winstonLogger.info(`SUCCESS: ${message}`);
+        this.getLogger().info(`SUCCESS: ${message}`);
     }
 
     // Agent-specific loggers
