@@ -1,7 +1,7 @@
 {
   "name": "@devdonzo/warden",
-  "version": "1.9.0",
-  "description": "Autonomous SRE & Security Orchestration Agent - The Warden of your Codebase",
+  "version": "1.10.0",
+  "description": "Dependency security automation and patch verification with reviewable scan and test evidence",
   "main": "dist/index.js",
   "bin": {
     "warden": "dist/index.js"
@@ -17,7 +17,9 @@
     "docs/OPEN-SOURCE-MAINTENANCE.md",
     "docs/WARDEN-VS-CODEX.md",
     "docs/SPEC/",
-    "docs/REFACTOR.md"
+    "docs/REFACTOR.md",
+    "docs/VERIFICATION.md",
+    "docs/PRODUCT-DIRECTION.md"
   ],
   "scripts": {
     "test": "jest",
@@ -40,7 +42,8 @@
     "smoke": "node scripts/smoke-test.js && node scripts/package-smoke-test.js",
     "release:check": "npm run clean:all && npm run build && npm test && npm run smoke && npm pack --dry-run",
     "prepublishOnly": "npm run build && npm test",
-    "benchmark": "npm run build && node scripts/benchmark.js"
+    "benchmark": "npm run build && node scripts/benchmark.js",
+    "smoke:verify:live": "npm run build && node scripts/verification-live-smoke.js"
   },
   "keywords": [
     "security",
@@ -57,7 +60,7 @@
     "pull-requests",
     "ci-cd",
     "security-tools",
-    "agentic-ai",
+    "dependency-verification",
     "github-actions"
   ],
   "author": {

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/**]
+    branches: [main, feat/**, warden/**]
   pull_request:
     branches: [main]
 
@@ -71,3 +71,20 @@ jobs:
 
       - name: Verify package can be packed
         run: npm pack --dry-run
+
+  verification-container:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - name: Verify a real dependency patch with host and container runners
+        env:
+          WARDEN_LIVE_DOCKER: '1'
+        run: node scripts/verification-live-smoke.js
