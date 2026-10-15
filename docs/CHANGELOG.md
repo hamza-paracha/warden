@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.10.0 — source preview
+
+- Added `warden verify` for committed single-package npm dependency patches.
+- Fresh base/candidate audit reports, target advisory checks, regression policy,
+  candidate tests, immutable revision IDs, and atomic JSON/Markdown evidence.
+- Docker tests by default; explicit `trusted-host` opt-in. Missing evidence fails
+  closed as incomplete. Source checkout and index are preserved.
+- Corrected eager logger creation that previously wrote a logs directory even
+  when importing the CLI to verify another repository.
+- Added fixture tests, a real advisory/patch smoke test, and container CI coverage.
+- Refreshed verification positioning and documented supported scope/limitations.
+- Updated compatible development dependencies to remove high/critical audit
+  findings; remaining development-tool moderate advisories require upstream work.
+
 All notable changes to Warden will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),

@@ -28,7 +28,7 @@ const program = new Command();
 
 program
     .name('warden')
-    .description('Warden - Autonomous SRE & Security Orchestration Agent')
+    .description('Warden - Dependency security automation and verification')
     .version(version);
 
 program.action(async () => {
@@ -215,6 +215,61 @@ program
         } catch (error: any) {
             logger.error('Fatal error during scan', error);
             process.exit(1);
+        }
+    });
+
+program
+    .command('verify')
+    .description('Verify an npm dependency fix between two Git commits and write review evidence')
+    .argument('[repository]', 'Local Git repository', '.')
+    .requiredOption('--base <ref>', 'Base Git commit/ref')
+    .requiredOption('--head <ref>', 'Candidate Git commit/ref')
+    .requiredOption('--advisory <ids...>', 'Target GHSA IDs or numeric npm advisory sources')
+    .requiredOption('--test-command <json>', 'Test argument array, for example \'["npm","test"]\'')
+    .addOption(
+        new Option(
+            '--test-runner <runner>',
+            'Container by default; trusted-host explicitly runs trusted repository code on this machine'
+        )
+            .choices(['docker', 'trusted-host'])
+            .default('docker')
+    )
+    .option('--image <image>', 'Pre-pulled Docker image', 'node:24-bookworm-slim')
+    .option('--timeout <ms>', 'Timeout per external command', parsePositiveInteger, 120000)
+    .addOption(
+        new Option('--severity <level>', 'Fail on new/worsened findings at this severity')
+            .choices(['low', 'medium', 'high', 'critical'])
+            .default('high')
+    )
+    .option('--output <path>', 'Evidence directory', 'scan-results/verification')
+    .option('--json', 'Print the complete evidence as JSON')
+    .action(async (repository, options) => {
+        try {
+            const testCommand = JSON.parse(options.testCommand);
+            if (!Array.isArray(testCommand))
+                throw new Error('--test-command must be a JSON argument array.');
+            const { verifyChange } = await import('./verification');
+            const result = await verifyChange({
+                repository: path.resolve(repository),
+                base: options.base,
+                head: options.head,
+                advisories: options.advisory,
+                testCommand,
+                runner: options.testRunner,
+                timeoutMs: options.timeout,
+                severity: options.severity,
+                output: options.output,
+                image: options.image,
+            });
+            console.log(
+                options.json
+                    ? JSON.stringify(result, null, 2)
+                    : `Verification ${result.status}: ${result.reasons.join(' ') || 'Target advisories resolved; configured checks passed.'}\nEvidence: ${path.resolve(options.output)}`
+            );
+            process.exitCode = result.exitCode;
+        } catch (error) {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 3;
         }
     });
 

@@ -1,6 +1,6 @@
 # Warden
 
-**Security scans, governed fixes, and reviewable pull requests—built for repeatable CI workflows.**
+**Verify dependency fixes with fresh security scans, test results, and reviewable evidence.**
 
 [![npm version](https://img.shields.io/npm/v/@devdonzo/warden?style=for-the-badge)](https://www.npmjs.com/package/@devdonzo/warden)
 [![CI](https://img.shields.io/github/actions/workflow/status/DevDonzo/warden/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/hamza-paracha/warden/actions/workflows/ci.yml)
@@ -9,6 +9,29 @@
 Warden scans Node.js and Python dependencies, prioritizes vulnerabilities, applies
 fixes within your policy, and can open GitHub PRs for review. Every run produces
 reports that explain what was found, what changed, and what policy allowed or blocked.
+
+## Verify dependency fixes
+
+Check a dependency patch from any developer or coding agent. Warden compares
+fresh base/candidate npm-audit reports, checks the target advisory, runs tests,
+and writes JSON/Markdown evidence for review.
+
+```sh
+warden verify /path/to/repo --base main --head dependency-fix \
+  --advisory GHSA-xxxx-yyyy-zzzz --test-command '["npm","test"]'
+```
+
+Replace the placeholder advisory with one observed in the base. The initial
+implementation supports single-package npm repositories and v2/v3 lockfiles.
+Docker is the default test runner; pull `node:24-bookworm-slim` first. For a
+repository you trust, `--test-runner trusted-host` explicitly enables host tests.
+A missing scanner, missing tests, or unavailable runner produces **incomplete**,
+never a pass. No LLM provider is required.
+
+See the [verification guide](docs/VERIFICATION.md) for setup, boundaries, evidence,
+and exit codes, and the [research and direction](docs/PRODUCT-DIRECTION.md) for
+the adoption experiment. This source version has not yet been published to npm;
+build it and use `node dist/index.js verify ...` until a release is published.
 
 ## New in 1.9: up to 9× faster vulnerability prioritization
 
