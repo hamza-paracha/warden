@@ -1,6 +1,6 @@
 # Maintenance priorities
 
-This is the active backlog for the v1.10.0 release. See
+This is the active backlog for the v1.10.0 GitHub source release. See
 [product direction](PRODUCT-DIRECTION.md) for the verifier's scope and
 [the changelog](CHANGELOG.md) for shipped changes. The former v1.1 roadmap
 and April architecture checklist have been consolidated here because many of
@@ -15,8 +15,8 @@ their proposed features already exist.
   identities, test results, and evidence bundle.
 - Keep missing scans, missing tests, unsupported projects, and unavailable runners
   incomplete rather than passing. Maintain the verifier's dedicated coverage gate.
-- Keep npm, GitHub release notes, website copy, and installation instructions
-  aligned on v1.10.0. Run release checks before each future publication.
+- npm publication of v1.10.0 remains pending; npm latest is v1.8.0. Keep source
+  availability distinct from npm availability until publication succeeds.
 
 ## 2. Test the remediation path more deeply
 
