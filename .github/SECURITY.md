@@ -2,11 +2,13 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.2.x   | :white_check_mark: |
-| 1.1.x   | :white_check_mark: |
-| < 1.1   | :x:                |
+Security fixes target the current source and latest npm release. Older release
+lines are not maintained separately.
+
+| Distribution | Current version |
+| --- | --- |
+| Current source | 1.10.0 |
+| npm latest | 1.10.0 |
 
 ## Reporting a Vulnerability
 

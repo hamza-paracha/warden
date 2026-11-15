@@ -389,5 +389,5 @@ warden dast https://staging.myapp.com
 ## Support
 
 For issues or questions:
-- GitHub Issues: https://github.com/DevDonzo/warden/issues
+- GitHub Issues: https://github.com/hamza-paracha/warden/issues
 - Documentation: https://warden-cli.vercel.app

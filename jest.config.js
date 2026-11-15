@@ -13,6 +13,13 @@ module.exports = {
         '!src/index.ts',
     ],
     coverageThreshold: {
+        // Keep the verifier covered independently of legacy paths.
+        './src/verification/index.ts': {
+            branches: 85,
+            functions: 90,
+            lines: 90,
+            statements: 90,
+        },
         global: {
             branches: 15,
             functions: 20,

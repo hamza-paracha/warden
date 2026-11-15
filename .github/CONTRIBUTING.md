@@ -22,20 +22,20 @@ Thank you for your interest in contributing to Warden! This document provides gu
 1. **Fork the repository**
    ```bash
    # Click the "Fork" button on GitHub, then:
-   git clone https://github.com/YOUR_USERNAME/the-warden.git
-   cd the-warden
+   git clone https://github.com/YOUR_USERNAME/warden.git
+   cd warden
    ```
 
 2. **Install dependencies**
    ```bash
-   npm install
+   npm ci
    ```
 
-3. **Set up environment variables**
-   ```bash
-   cp .env.example .env
-   # Edit .env with your tokens
-   ```
+3. **Optional scanner and GitHub credentials**
+
+   No credentials are needed for the offline tests or an npm-audit scan. For Snyk
+   or PR creation, create a local `.env` containing `SNYK_TOKEN` or `GITHUB_TOKEN`
+   as needed. Never commit credentials.
 
 4. **Build the project**
    ```bash
@@ -133,19 +133,22 @@ npm run test:coverage
 ## 🏗️ Project Structure
 
 ```
-the-warden/
+warden/
 ├── src/
 │   ├── agents/          # The three agents
 │   │   ├── watchman/   # Scanner agent
 │   │   ├── engineer/   # Fixer agent
 │   │   └── diplomat/   # PR agent
 │   ├── core/           # Core configuration
+│   ├── verification/   # Patch comparison and test execution
+│   ├── workflows/      # Scan workflows
+│   ├── services/       # Process execution and artifact writes
 │   ├── utils/          # Utilities
 │   ├── cli.ts          # CLI interface
 │   ├── orchestrator.ts # Main orchestration
 │   └── setup.ts        # Setup wizard
 ├── __tests__/          # Test files
-├── SPEC/               # Specifications
+├── docs/SPEC/          # Specifications
 └── dist/               # Compiled output
 ```
 
@@ -163,7 +166,7 @@ the-warden/
 # Build the project
 npm run build
 
-# Run in development mode (hot reload)
+# Run the CLI from TypeScript
 npm run dev
 
 # Clean build artifacts and logs

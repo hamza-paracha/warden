@@ -15,9 +15,9 @@ at both revisions. Workspaces, submodules, symlinks, and lockfiles older than v2
 are outside the initial scope. Dirty working files are left alone: the verifier
 exports the requested commits to disposable directories.
 
-Build from a source checkout with `npm ci` and `npm run build`. Until this version
-is published to npm, invoke the built CLI using `node /path/to/warden/dist/index.js`
-in place of `warden` below.
+Install v1.10.0 or newer with `npm install -g @devdonzo/warden`. From a source
+checkout, run `npm ci` and `npm run build`, then invoke the built CLI using
+`node /path/to/warden/dist/index.js` in place of `warden` below.
 
 Pull the test container image once:
 

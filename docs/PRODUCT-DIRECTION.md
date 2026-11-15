@@ -2,7 +2,7 @@
 
 Research date: October 15, 2026.
 User priority: a useful tool with real users; portfolio value is secondary.
-Status: initial npm verification milestone implemented in v1.10.0 source; npm publication and maintainer pilots remain pending. This does not establish product-market fit.
+Status: initial npm verification milestone released in v1.10.0. Maintainer pilots remain pending. This does not establish product-market fit.
 
 ## Recommendation
 
@@ -98,7 +98,7 @@ Current shipped description:
 
 > A TypeScript security automation CLI with dependency scans, remediation policies, regression baselines, and reviewable pull-request workflows.
 
-Verification description for the v1.10.0 source:
+Verification description for v1.10.0:
 
 > Verify dependency patches from any developer or coding agent with before/after security findings, test results, and a reviewable evidence bundle.
 

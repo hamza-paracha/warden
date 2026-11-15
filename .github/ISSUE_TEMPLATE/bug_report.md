@@ -27,7 +27,7 @@ Paste error output or logs here
 ## 🖥️ Environment
 - **OS**: [e.g., macOS 14.0, Ubuntu 22.04]
 - **Node.js**: [e.g., 18.17.0]
-- **Warden Version**: [e.g., 1.1.0]
+- **Warden Version**: [e.g., 1.10.0; include whether installed from npm or source]
 - **Scanner**: [snyk/npm-audit]
 
 ## 📝 Additional Context

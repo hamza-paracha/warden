@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.10.0 — source preview
+## [1.10.0] - 2026-11-15
 
 - Added `warden verify` for committed single-package npm dependency patches.
 - Fresh base/candidate audit reports, target advisory checks, regression policy,
@@ -389,6 +389,6 @@ warden init                         # Initialize in repo
 
 ---
 
-[1.1.0]: https://github.com/DevDonzo/warden/releases/tag/v1.1.0
-[1.0.0]: https://github.com/DevDonzo/warden/releases/tag/v1.0.0
-[0.1.0]: https://github.com/DevDonzo/warden/releases/tag/v0.1.0
+[1.1.0]: https://github.com/hamza-paracha/warden/releases/tag/v1.1.0
+[1.0.0]: https://github.com/hamza-paracha/warden/releases/tag/v1.0.0
+[0.1.0]: https://github.com/hamza-paracha/warden/releases/tag/v0.1.0
