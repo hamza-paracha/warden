@@ -1,6 +1,6 @@
 # SPEC 003: Verify a dependency-remediation change
 
-Status: initial npm implementation released in v1.10.0; see `docs/VERIFICATION.md` for supported scope and known boundaries.
+Status: initial npm implementation available in the v1.10.0 GitHub source release (npm publication pending); see `docs/VERIFICATION.md` for supported scope and known boundaries.
 
 ## Problem
 

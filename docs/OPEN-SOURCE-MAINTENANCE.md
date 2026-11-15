@@ -8,8 +8,9 @@ Warden is maintained as a public open-source security automation project.
 - Package: <https://www.npmjs.com/package/@devdonzo/warden>
 - License: ISC
 - Primary maintainer: DevDonzo
-- Current release: **1.10.0**, including the initial npm dependency patch verifier.
-  Release date: 2026-11-15.
+- Current GitHub source release: **1.10.0**, including the initial npm dependency
+  patch verifier. Source release date: 2026-11-15.
+- npm latest remains **1.8.0**; publication of v1.10.0 is pending.
 - npm download API snapshot checked on 2026-11-15: **1,877 downloads** for the
   returned interval **2025-05-14 through 2026-11-14**. Downloads include automated
   installations and do not measure unique or active users.

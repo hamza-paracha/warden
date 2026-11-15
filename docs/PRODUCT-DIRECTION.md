@@ -1,7 +1,7 @@
 # Warden direction: dependency remediation verification
 
 Research date: October 15, 2026.
-Status: initial npm verification milestone released in v1.10.0. Maintainer pilots remain pending. This does not establish product-market fit.
+Status: initial npm verification milestone available in the v1.10.0 GitHub source release. npm publication and maintainer pilots remain pending. This does not establish product-market fit.
 
 ## Recommendation
 

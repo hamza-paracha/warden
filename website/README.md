@@ -13,5 +13,5 @@ and selects the command with a helpful message if clipboard access is unavailabl
 Feature animations use CSS and respect reduced-motion preferences; the content
 remains visible without JavaScript. No observer or animation library is required.
 
-Current website and npm release: **v1.10.0**. The release dialog, release link,
-installation note, and verification guide describe this version.
+Current website: **v1.10.0 GitHub source release**. npm latest remains **v1.8.0**;
+the installation note distinguishes npm from source-only verification.

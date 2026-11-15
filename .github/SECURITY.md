@@ -8,7 +8,7 @@ lines are not maintained separately.
 | Distribution | Current version |
 | --- | --- |
 | Current source | 1.10.0 |
-| npm latest | 1.10.0 |
+| npm latest | 1.8.0 |
 
 ## Reporting a Vulnerability
 

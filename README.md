@@ -2,7 +2,7 @@
 
 **Verify dependency fixes with fresh security scans, test results, and reviewable evidence.**
 
-Current release: **v1.10.0**, including the initial npm dependency patch verifier.
+Current GitHub source release: **v1.10.0**. npm latest remains **v1.8.0**.
 
 [![npm version](https://img.shields.io/npm/v/@devdonzo/warden?style=for-the-badge)](https://www.npmjs.com/package/@devdonzo/warden)
 [![CI](https://img.shields.io/github/actions/workflow/status/hamza-paracha/warden/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/hamza-paracha/warden/actions/workflows/ci.yml)
@@ -32,7 +32,8 @@ never a pass. No LLM provider is required.
 
 See the [verification guide](docs/VERIFICATION.md) for setup, boundaries, evidence,
 and exit codes, and the [research and direction](docs/PRODUCT-DIRECTION.md) for
-the adoption experiment. Install the current release from npm to use `warden verify`.
+the adoption experiment. Verification is available from the v1.10.0 GitHub source
+release; build it and use `node dist/index.js verify ...`. npm publication is pending.
 
 ## Engineering highlights
 

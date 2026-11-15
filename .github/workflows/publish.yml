@@ -11,6 +11,8 @@ on:
 
 jobs:
   publish:
+    # GitHub-only source releases can explicitly opt out of npm publication.
+    if: github.event_name != 'release' || !contains(github.event.release.body, '<!-- skip-npm-publish -->')
     runs-on: ubuntu-latest
     
     permissions:
