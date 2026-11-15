@@ -15,3 +15,6 @@ remains visible without JavaScript. No observer or animation library is required
 
 Current website: **v1.10.0 GitHub source release**. npm latest remains **v1.8.0**;
 the installation note distinguishes npm from source-only verification.
+
+A persistent banner links to the latest GitHub release and explains the npm
+publishing delay. The npm install box is labeled as the older release.

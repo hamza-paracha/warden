@@ -22,6 +22,34 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+.release-notice {
+    padding: 0.9rem 1.5rem;
+    background: #eff6ff;
+    border-bottom: 1px solid #bfdbfe;
+    color: #1e3a8a;
+    text-align: center;
+    font-size: 0.875rem;
+    line-height: 1.7;
+}
+
+.release-notice p {
+    max-width: 1000px;
+    margin: 0 auto;
+}
+
+.release-notice a {
+    display: inline-block;
+    margin-inline-start: 0.5rem;
+    color: #1d4ed8;
+    font-weight: 600;
+    text-underline-offset: 3px;
+}
+
+.release-notice a:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 4px;
+}
+
 .main-wrapper {
     max-width: 1000px;
     margin: 0 auto;
