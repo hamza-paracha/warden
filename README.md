@@ -2,8 +2,10 @@
 
 **Verify dependency fixes with fresh security scans, test results, and reviewable evidence.**
 
+Current release: **v1.10.0**, including the initial npm dependency patch verifier.
+
 [![npm version](https://img.shields.io/npm/v/@devdonzo/warden?style=for-the-badge)](https://www.npmjs.com/package/@devdonzo/warden)
-[![CI](https://img.shields.io/github/actions/workflow/status/DevDonzo/warden/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/hamza-paracha/warden/actions/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/hamza-paracha/warden/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/hamza-paracha/warden/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg?style=for-the-badge)](LICENSE)
 
 Warden scans Node.js and Python dependencies, prioritizes vulnerabilities, applies
@@ -30,10 +32,20 @@ never a pass. No LLM provider is required.
 
 See the [verification guide](docs/VERIFICATION.md) for setup, boundaries, evidence,
 and exit codes, and the [research and direction](docs/PRODUCT-DIRECTION.md) for
-the adoption experiment. This source version has not yet been published to npm;
-build it and use `node dist/index.js verify ...` until a release is published.
+the adoption experiment. Install the current release from npm to use `warden verify`.
 
-## New in 1.9: up to 9× faster vulnerability prioritization
+## Engineering highlights
+
+- **Patch verification:** compare immutable Git revisions, rescan both dependency trees,
+  check target advisory removal, and detect new or worsened findings.
+- **Isolated tests:** Docker runs candidate tests without network access; missing
+  evidence produces an explicit incomplete result.
+- **Policy-driven remediation:** severity thresholds, fix limits, accepted-risk
+  baselines, and reviewable GitHub pull requests.
+- **Review evidence:** JSON/Markdown verification bundles, SARIF 2.1.0 scan reports,
+  stable finding fingerprints, and atomic artifact writes.
+
+### Prioritization performance
 
 The scanning and remediation core has been refactored for less overhead, safer
 process execution, and more reliable results.
@@ -245,10 +257,12 @@ Email delivery also supports a generic webhook through
 
 ## Development and verification
 
-Version 1.9 was verified with **170 passing tests across 27 suites**, the coverage
-gate, packaged CLI smoke tests, a production-only installation, and SARIF
-validation against the OASIS schema. Live authenticated GitHub and external DAST
-operations are outside the offline test coverage.
+The current source passes **216 tests across 29 suites**. CI checks TypeScript
+builds, test coverage, formatting, and packaged CLI smoke tests on Node.js 22 and
+24. A separate CI job exercises a real dependency patch with host and Docker test
+runners. The verifier has its own coverage gate; the broader project still has
+coverage gaps, particularly in remediation and orchestration. Live authenticated
+GitHub and external DAST operations are outside the offline test coverage.
 
 ```bash
 npm test -- --runInBand
@@ -259,7 +273,21 @@ npm run smoke
 Use targeted tests during development. `npm run release:check` performs the full
 clean/build/test/package gate when preparing a release.
 
+## Repository map
+
+| Directory | Responsibility |
+|---|---|
+| `src/verification/` | Dependency patch comparison, test runners, and evidence |
+| `src/scanners/`, `src/agents/watchman/` | Scanner adapters and normalized findings |
+| `src/agents/engineer/`, `src/agents/diplomat/` | Dependency fixes, Git branches, and PRs |
+| `src/workflows/`, `src/services/`, `src/utils/` | Orchestration, process execution, policy, and reports |
+| `__tests__/`, `scripts/` | Regression tests, package smoke checks, and benchmarks |
+| `schemas/`, `examples/`, `docs/` | Artifact contracts, integration examples, and guides |
+| `website/`, `video/` | Website and promotional video sources |
+
 ## Documentation
+
+- [Current priorities and known gaps](docs/IMPROVEMENTS.md)
 
 - [What changed and benchmark details](docs/REFACTOR.md)
 - [Changelog](docs/CHANGELOG.md)

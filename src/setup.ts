@@ -33,7 +33,7 @@ export async function runSetup(): Promise<void> {
     `)
     );
     console.log(chalk.bold.blue('           WARDEN') + chalk.dim.gray(' by DevDonzo'));
-    console.log(chalk.gray('           https://github.com/DevDonzo/warden\n'));
+    console.log(chalk.gray('           https://github.com/hamza-paracha/warden\n'));
 
     logger.info('This will help you configure your environment.\n');
 

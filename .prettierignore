@@ -5,6 +5,7 @@ coverage/
 scan-results/
 logs/
 video/out/
+out/
 *.log
 
 # Dependencies and package manager alternates

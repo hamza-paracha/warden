@@ -2,7 +2,7 @@
 
 Static source for https://warden.hamzaparacha.me. No package install or build is required.
 
-Serve this directory with a local static server to preview it. The release popup uses a native dialog and remembers dismissal under `warden:release:1.9.0:dismissed` in localStorage. The navigation's “What's new” button reopens it. Escape, ×, “Got it”, and the backdrop dismiss it. If storage is unavailable, dismissal works for the current page visit.
+Serve this directory with a local static server to preview it. The release popup uses a native dialog and remembers dismissal under `warden:release:1.10.0:dismissed` in localStorage. The navigation's “What's new” button reopens it. Escape, ×, “Got it”, and the backdrop dismiss it. If storage is unavailable, dismissal works for the current page visit.
 
 For the next release, update the popup copy, release link, and `data-version` value in `index.html`; the dismissal key is derived from it.
 
@@ -12,3 +12,6 @@ The install button copies the displayed command, announces success to screen rea
 and selects the command with a helpful message if clipboard access is unavailable.
 Feature animations use CSS and respect reduced-motion preferences; the content
 remains visible without JavaScript. No observer or animation library is required.
+
+Current website and npm release: **v1.10.0**. The release dialog, release link,
+installation note, and verification guide describe this version.
