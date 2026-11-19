@@ -21,6 +21,8 @@ out/
 .env
 .env*.local
 .wardenrc.json
+.warden/keys/
+*.key
 workspaces/
 .vercel/
 .claude/settings.local.json

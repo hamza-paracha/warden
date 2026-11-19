@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+- Added the supply-chain guard: `warden inspect` and `warden review` diff each newly
+  installed release against its predecessor and flag added install scripts, manifest
+  confusion, credential/env reads, exfiltration patterns, global fetch/wallet hooks,
+  obfuscation, shipped workflows, secret scanners, dropped provenance, new publishers,
+  fresh releases, typosquats, nonexistent (hallucinated) names, and lockfile tampering.
+- `warden verify` now includes the release review in its evidence (`--no-supply-chain`
+  to skip). Review policy is read from the base revision.
+- Added `warden guard` (PreToolUse hook for Claude Code and Devin), `warden agent-setup`,
+  and a `warden mcp` stdio server for coding agents.
+- Added `warden attest` to sign and check evidence as DSSE-wrapped in-toto statements.
+- Added `semver` as a runtime dependency.
+
 ## [1.10.0] - 2026-11-15
 
 - Added `warden verify` for committed single-package npm dependency patches.

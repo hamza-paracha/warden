@@ -243,6 +243,11 @@ program
     )
     .option('--output <path>', 'Evidence directory', 'scan-results/verification')
     .option('--json', 'Print the complete evidence as JSON')
+    .option('--no-supply-chain', 'Skip the behavioral review of newly installed releases')
+    .option(
+        '--attest-key <path>',
+        'Sign the evidence as a DSSE/in-toto attestation with this Ed25519 key'
+    )
     .action(async (repository, options) => {
         try {
             const testCommand = JSON.parse(options.testCommand);
@@ -260,7 +265,15 @@ program
                 severity: options.severity,
                 output: options.output,
                 image: options.image,
+                supplyChain: options.supplyChain,
             });
+            if (options.attestKey) {
+                const { attestFile } = await import('./attestation');
+                attestFile(
+                    path.join(path.resolve(options.output), 'verification.json'),
+                    path.resolve(options.attestKey)
+                );
+            }
             console.log(
                 options.json
                     ? JSON.stringify(result, null, 2)
@@ -270,6 +283,264 @@ program
         } catch (error) {
             console.error(error instanceof Error ? error.message : String(error));
             process.exitCode = 3;
+        }
+    });
+
+const supplyChainOptions = (command: Command) =>
+    command
+        .option('--json', 'Print machine-readable JSON')
+        .option('--no-diff', 'Skip downloading and diffing release contents')
+        .option('--min-age <hours>', 'Minimum release age in hours', parseNonNegativeInteger)
+        .addOption(
+            new Option(
+                '--block-at <severity>',
+                'Block when a signal reaches this severity'
+            ).choices(['low', 'medium', 'high', 'critical'])
+        );
+
+const policyOverrides = (options: any) => ({
+    diff: options.diff === false ? false : undefined,
+    minReleaseAgeHours: options.minAge,
+    blockAt: options.blockAt,
+});
+
+supplyChainOptions(
+    program
+        .command('inspect')
+        .description(
+            'Check npm packages before installing: hallucinated names, typosquats, fresh releases, provenance, and risky code changes'
+        )
+        .argument('<packages...>', 'Package specs, for example chalk lodash@^4 @scope/pkg@1.2.3')
+        .option('--from <version>', 'Diff against this version instead of the previous release')
+).action(async (packages: string[], options) => {
+    try {
+        const sc = await import('./supply-chain');
+        const policy = sc.loadSupplyChainPolicy(process.cwd(), policyOverrides(options));
+        const results = await Promise.all(
+            packages.map((spec) => {
+                const { name, range } = sc.parsePackageSpec(spec);
+                return sc.assessPackage(name, range, { policy, from: options.from });
+            })
+        );
+        console.log(
+            options.json
+                ? JSON.stringify(results, null, 2)
+                : results.map(sc.formatAssessment).join('\n\n')
+        );
+        process.exitCode = results.some((r) => r.verdict === 'block')
+            ? 2
+            : results.some((r) => r.errors.length)
+              ? 3
+              : 0;
+    } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 3;
+    }
+});
+
+supplyChainOptions(
+    program
+        .command('review')
+        .description(
+            'Review every release a lockfile change newly installs (works on any dependency PR, including Dependabot/Renovate)'
+        )
+        .argument('[repository]', 'Local Git repository', '.')
+        .requiredOption('--base <ref>', 'Base Git commit/ref')
+        .option('--head <ref>', 'Candidate Git commit/ref', 'HEAD')
+        .option('--lockfile <path>', 'Repository-relative lockfile', 'package-lock.json')
+        .option('--output <path>', 'Evidence directory', 'scan-results/review')
+        .option('--attest-key <path>', 'Sign the review as a DSSE/in-toto attestation')
+).action(async (repository: string, options) => {
+    try {
+        const sc = await import('./supply-chain');
+        const { writeJsonAtomic } = await import('./services/artifacts');
+        const root = path.resolve(repository);
+        const review = await sc.reviewDependencyChange({
+            repository: root,
+            base: options.base,
+            head: options.head,
+            lockfile: options.lockfile,
+            overrides: policyOverrides(options),
+        });
+        const output = path.resolve(options.output);
+        writeJsonAtomic(path.join(output, 'dependency-review.json'), review);
+        fs.writeFileSync(
+            path.join(output, 'dependency-review.md'),
+            sc.formatReviewMarkdown(review)
+        );
+        if (options.attestKey) {
+            const { attestFile } = await import('./attestation');
+            attestFile(
+                path.join(output, 'dependency-review.json'),
+                path.resolve(options.attestKey)
+            );
+        }
+        console.log(
+            options.json
+                ? JSON.stringify(review, null, 2)
+                : `${sc.formatReviewMarkdown(review)}\nEvidence: ${output}`
+        );
+        process.exitCode = review.exitCode;
+    } catch (error) {
+        console.error(error instanceof Error ? error.message : String(error));
+        process.exitCode = 3;
+    }
+});
+
+program
+    .command('guard')
+    .description('Check an install command, or run as a Claude Code/Devin PreToolUse hook (--hook)')
+    .argument('[command...]', 'Shell command to check, e.g. "npm install left-pad"')
+    .option('--hook', 'Read a hook payload from stdin and block risky installs with exit code 2')
+    .option('--fail-closed', 'Block when registry evidence cannot be collected')
+    .option('--json', 'Print machine-readable JSON')
+    .action(async (words: string[], options) => {
+        const guard = await import('./guard');
+        if (options.hook) {
+            const chunks: Buffer[] = [];
+            for await (const chunk of process.stdin) chunks.push(chunk as Buffer);
+            const result = await guard
+                .runGuardHook(Buffer.concat(chunks).toString('utf8'), {
+                    failClosed: options.failClosed,
+                })
+                .catch((error) => ({
+                    exitCode: options.failClosed ? 2 : 0,
+                    stdout: '',
+                    stderr: `warden guard: ${error instanceof Error ? error.message : String(error)}\n`,
+                }));
+            if (result.stdout) process.stdout.write(result.stdout);
+            if (result.stderr) process.stderr.write(result.stderr);
+            process.exitCode = result.exitCode;
+            return;
+        }
+        try {
+            const check = await guard.checkInstallCommand(words.join(' '));
+            console.log(
+                options.json
+                    ? JSON.stringify(check, null, 2)
+                    : check.targets.length
+                      ? `Verdict: ${check.verdict.toUpperCase()}\n${guard.formatCommandCheck(check)}`
+                      : 'The command installs no registry packages.'
+            );
+            process.exitCode = check.verdict === 'block' ? 2 : 0;
+        } catch (error) {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 3;
+        }
+    });
+
+program
+    .command('agent-setup')
+    .description('Wire Warden into a coding agent: MCP server plus a pre-install guard hook')
+    .argument('<agents...>', 'claude, devin, and/or codex')
+    .option('--dir <path>', 'Project directory', '.')
+    .option('--command <command>', 'How the agent should invoke Warden', 'warden')
+    .option('--no-hooks', 'Only register the MCP server')
+    .option('--no-mcp', 'Only install the guard hook')
+    .action(async (agents: string[], options) => {
+        const { setupAgent } = await import('./guard');
+        try {
+            for (const agent of agents) {
+                if (!['claude', 'devin', 'codex'].includes(agent))
+                    throw new Error(`Unsupported agent: ${agent}. Use claude, devin, or codex.`);
+                const result = setupAgent(
+                    agent as 'claude' | 'devin' | 'codex',
+                    path.resolve(options.dir),
+                    {
+                        command: options.command,
+                        hooks: options.hooks,
+                        mcp: options.mcp,
+                    }
+                );
+                for (const file of result.changed) logger.success(`${agent}: updated ${file}`);
+                for (const file of result.unchanged)
+                    logger.info(`${agent}: ${file} already configured`);
+                if (result.instructions) console.log(`\n${result.instructions}\n`);
+            }
+        } catch (error) {
+            logger.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 1;
+        }
+    });
+
+program
+    .command('mcp')
+    .description('Serve Warden tools to coding agents over the Model Context Protocol (stdio)')
+    .action(async () => {
+        const { startMcpServer } = await import('./mcp/server');
+        await startMcpServer(version);
+    });
+
+const attest = program
+    .command('attest')
+    .description('Sign and check Warden evidence as DSSE-wrapped in-toto attestations');
+
+attest
+    .command('keygen')
+    .description('Generate an Ed25519 signing key pair')
+    .option('--dir <path>', 'Key directory', '.warden/keys')
+    .action((options) => {
+        const { generateSigningKey } = require('./attestation');
+        const keys = generateSigningKey(path.resolve(options.dir));
+        logger.success(`Private key: ${keys.privateKey} (keep secret; do not commit)`);
+        logger.success(`Public key:  ${keys.publicKey} (share with reviewers)`);
+    });
+
+attest
+    .command('sign')
+    .description('Sign verification.json or dependency-review.json')
+    .argument('<evidence>', 'Evidence JSON file')
+    .requiredOption('--key <path>', 'Ed25519 private key (PEM)')
+    .option('--output <path>', 'Envelope path (default <evidence>.intoto.json)')
+    .action((evidence: string, options) => {
+        const { attestFile } = require('./attestation');
+        try {
+            const output = attestFile(
+                path.resolve(evidence),
+                path.resolve(options.key),
+                options.output && path.resolve(options.output)
+            );
+            logger.success(`Attestation written to ${output}`);
+        } catch (error) {
+            logger.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 1;
+        }
+    });
+
+attest
+    .command('check')
+    .description('Check an attestation signature and print what it attests')
+    .argument('<envelope>', 'DSSE envelope (.intoto.json)')
+    .requiredOption('--key <path>', 'Ed25519 public key (PEM)')
+    .option('--json', 'Print the verified statement as JSON')
+    .action((envelope: string, options) => {
+        const { verifyEnvelope } = require('./attestation');
+        try {
+            const result = verifyEnvelope(
+                JSON.parse(fs.readFileSync(path.resolve(envelope), 'utf8')),
+                fs.readFileSync(path.resolve(options.key), 'utf8')
+            );
+            if (!result.valid) {
+                console.error(`INVALID: ${result.reason}`);
+                process.exitCode = 1;
+                return;
+            }
+            const predicate = result.statement.predicate;
+            console.log(
+                options.json
+                    ? JSON.stringify(result.statement, null, 2)
+                    : [
+                          `VALID signature from ${result.keyid}`,
+                          `Predicate: ${result.statement.predicateType}`,
+                          `Result: ${predicate?.status}`,
+                          ...result.statement.subject.map(
+                              (s: any) => `Subject ${s.name}: ${Object.values(s.digest)[0]}`
+                          ),
+                      ].join('\n')
+            );
+        } catch (error) {
+            console.error(error instanceof Error ? error.message : String(error));
+            process.exitCode = 1;
         }
     });
 

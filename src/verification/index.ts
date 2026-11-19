@@ -4,6 +4,12 @@ import * as path from 'path';
 import { createHash, randomUUID } from 'crypto';
 import { runProcess, ProcessError } from '../services/process';
 import { writeJsonAtomic } from '../services/artifacts';
+import {
+    DependencyReview,
+    policyFromConfigText,
+    reviewLockfiles,
+    SupplyChainPolicy,
+} from '../supply-chain';
 
 export type Finding = { id: string; package: string; severity: string; aliases?: string[] };
 export type Check = {
@@ -27,6 +33,9 @@ export interface VerifyOptions {
     severity: 'low' | 'medium' | 'high' | 'critical';
     output: string;
     image?: string;
+    /** Review newly installed releases for supply-chain risk (default true). */
+    supplyChain?: boolean;
+    supplyChainPolicy?: SupplyChainPolicy;
 }
 export type Evidence = {
     schemaVersion: 1;
@@ -45,6 +54,7 @@ export type Evidence = {
     checks: Record<string, Check>;
     changedFiles?: string[];
     comparison?: ReturnType<typeof compareFindings>;
+    supplyChain?: DependencyReview;
 };
 const rank: Record<string, number> = { low: 1, medium: 2, high: 3, critical: 4 };
 const auditArgs = [
@@ -493,12 +503,36 @@ export async function verifyChange(options: VerifyOptions): Promise<Evidence> {
                 'Candidate tests or installation changed dependency files; evidence is incomplete.'
             );
         }
+        if (options.supplyChain !== false) {
+            const read = (label: string, file: string) => {
+                const target = path.join(temp, label, file);
+                return fs.existsSync(target) ? fs.readFileSync(target, 'utf8') : undefined;
+            };
+            // Policy comes from the base snapshot so a candidate cannot allowlist itself.
+            evidence.supplyChain = await reviewLockfiles(
+                JSON.parse(read('base', 'package-lock.json')!),
+                JSON.parse(read('head', 'package-lock.json')!),
+                {
+                    policy:
+                        options.supplyChainPolicy ??
+                        policyFromConfigText(read('base', '.wardenrc.json')),
+                }
+            );
+            if (evidence.supplyChain.status === 'incomplete')
+                throw new Error(
+                    `Supply-chain review incomplete: ${evidence.supplyChain.reasons.join(' ')}`
+                );
+        }
         const comparison = evidence.comparison;
         if (!testsPassed) evidence.reasons.push('Candidate tests failed.');
         if (comparison.remainingTargets.length)
             evidence.reasons.push('Target advisory remains in the candidate.');
         if (comparison.regressions.length)
             evidence.reasons.push('New or worsened findings exceed the severity threshold.');
+        if (evidence.supplyChain?.status === 'failed')
+            evidence.reasons.push(
+                `Supply-chain review flagged newly installed releases: ${evidence.supplyChain.reasons.join(' ')}`
+            );
         evidence.status = evidence.reasons.length ? 'failed' : 'passed';
         evidence.exitCode = evidence.status === 'passed' ? 0 : 2;
     } catch (error) {
@@ -528,6 +562,7 @@ export async function verifyChange(options: VerifyOptions): Promise<Evidence> {
                 `- New findings: ${evidence.comparison?.newFindings.length ?? 'unknown'}`,
                 `- Resolved findings: ${evidence.comparison?.resolved.length ?? 'unknown'}`,
                 `- Test status: ${evidence.checks.tests?.status || 'not run'}`,
+                `- Supply-chain review: ${evidence.supplyChain ? `${evidence.supplyChain.status} (${evidence.supplyChain.summary.reviewed} releases, ${evidence.supplyChain.summary.blocked} blocked, ${evidence.supplyChain.summary.warned} warned)` : 'not run'}`,
                 '',
                 ...evidence.reasons.map((reason) => `- ${reason.replace(/[\r\n]/g, ' ')}`),
                 '',

@@ -1,7 +1,7 @@
 {
   "name": "@devdonzo/warden",
   "version": "1.10.0",
-  "description": "Dependency security automation and patch verification with reviewable scan and test evidence",
+  "description": "Supply-chain firewall for coding agents and dependency PRs: release diffing, install guard, MCP server, and signed verification evidence",
   "main": "dist/index.js",
   "bin": {
     "warden": "dist/index.js"
@@ -20,6 +20,7 @@
     "docs/REFACTOR.md",
     "docs/IMPROVEMENTS.md",
     "docs/VERIFICATION.md",
+    "docs/SUPPLY-CHAIN.md",
     "docs/PRODUCT-DIRECTION.md"
   ],
   "scripts": {
@@ -62,7 +63,12 @@
     "ci-cd",
     "security-tools",
     "dependency-verification",
-    "github-actions"
+    "github-actions",
+    "supply-chain-security",
+    "mcp",
+    "ai-agents",
+    "typosquatting",
+    "in-toto"
   ],
   "author": {
     "name": "DevDonzo",
@@ -84,12 +90,14 @@
     "commander": "^14.0.2",
     "dotenv": "^17.2.3",
     "ora": "^5.4.1",
+    "semver": "7.8.5",
     "winston": "^3.19.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/node": "^25.0.9",
+    "@types/semver": "7.8.0",
     "@types/xml2js": "^0.4.14",
     "jest": "^30.2.0",
     "prettier": "^3.8.3",
