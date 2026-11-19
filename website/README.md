@@ -2,19 +2,19 @@
 
 Static source for https://warden.hamzaparacha.me. No package install or build is required.
 
-Serve this directory with a local static server to preview it. The release popup uses a native dialog and remembers dismissal under `warden:release:1.10.0:dismissed` in localStorage. The navigation's “What's new” button reopens it. Escape, ×, “Got it”, and the backdrop dismiss it. If storage is unavailable, dismissal works for the current page visit.
+Serve this directory with any static server to preview it, for example
+`python3 -m http.server` from `website/`.
 
-For the next release, update the popup copy, release link, and `data-version` value in `index.html`; the dismissal key is derived from it.
+The "What's new" dialog opens once per visitor and remembers dismissal in
+localStorage under `warden:release:<data-version>:dismissed`, using the
+`data-version` value on `#release-modal` in `index.html`. Change that value to show
+the dialog again after a new release. Escape, ×, "Got it", and the backdrop close it.
 
-The existing Vercel `warden` project uses `website` as its root directory for GitHub deployments. Push website changes to `main` to deploy, or run the Vercel CLI from the repository root with that project linked. `website/vercel.json` explicitly skips installation and builds. Do not change the project's root to the CLI application.
+The install button copies the displayed command, announces success to screen
+readers, and selects the command if clipboard access is unavailable. Animations are
+CSS-only and turn off for visitors who prefer reduced motion; all content stays
+visible without JavaScript.
 
-The install button copies the displayed command, announces success to screen readers,
-and selects the command with a helpful message if clipboard access is unavailable.
-Feature animations use CSS and respect reduced-motion preferences; the content
-remains visible without JavaScript. No observer or animation library is required.
-
-Current website: **v1.10.0 GitHub source release**. npm latest remains **v1.8.0**;
-the installation note distinguishes npm from source-only verification.
-
-A persistent banner links to the latest GitHub release and explains the npm
-publishing delay. The npm install box is labeled as the older release.
+The Vercel `warden` project uses `website` as its root directory. Pushing to `main`
+deploys it. `website/vercel.json` skips installation and builds. Do not change the
+project's root to the CLI application.

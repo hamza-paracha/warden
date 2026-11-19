@@ -4,118 +4,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Warden - Dependency Fix Verification</title>
+    <title>Warden - Stop AI coding agents from installing malicious packages</title>
     <meta name="description"
-        content="Verify dependency fixes with before-and-after security scans, test results, and reviewable evidence.">
+        content="Warden stops AI coding agents and dependency updates from installing fake, look-alike, or tampered npm packages.">
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="stylesheet" href="styles.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,700;12..96,800&family=Martian+Mono:wght@400;500&display=swap"
         rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-    <aside class="release-notice" aria-labelledby="release-notice-title">
-        <div class="release-notice-inner">
-            <div class="release-notice-copy">
-                <span class="release-notice-label">INSTALLATION UPDATE</span>
-                <h2 id="release-notice-title">Get the latest Warden on GitHub.</h2>
-                <p>npm is behind while I sort out publishing issues. Grab v1.10.0 from GitHub for the latest features.</p>
-            </div>
-            <a class="release-notice-button" href="https://github.com/hamza-paracha/warden/releases/latest">Get the latest release <span aria-hidden="true">↗</span></a>
-        </div>
-    </aside>
-    <div class="main-wrapper">
-        <nav class="nav">
-            <div class="nav-brand">Warden</div>
-            <div class="nav-links">
-                <button class="release-trigger" id="release-trigger" type="button" hidden>What's new <span>1.10</span></button>
-                <a href="https://github.com/hamza-paracha/warden" target="_blank" rel="noopener">GitHub</a>
-                <a href="https://www.npmjs.com/package/@devdonzo/warden" target="_blank" rel="noopener">npm</a>
-            </div>
+    <header class="nav">
+        <a class="nav-brand" href="#top" aria-label="Warden home">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m8.5 8.5 2 7 1.5-3.5 1.5 3.5 2-7"/></svg>
+            Warden
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+            <button class="release-trigger" id="release-trigger" type="button" hidden>What's new</button>
+            <a href="https://github.com/hamza-paracha/warden/blob/main/docs/SUPPLY-CHAIN.md">Guide</a>
+            <a href="https://github.com/hamza-paracha/warden" target="_blank" rel="noopener">GitHub</a>
+            <a href="https://www.npmjs.com/package/@devdonzo/warden" target="_blank" rel="noopener">npm</a>
         </nav>
+    </header>
 
-        <main class="hero">
-            <h1 class="title">Verify dependency fixes.<br><span class="highlight">Keep the evidence.</span></h1>
+    <main id="top">
+        <section class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Supply-chain security for AI coding agents</p>
+                <h1>Your agent wants to install it.<br><em>Warden checks it first.</em></h1>
+                <p class="lede">
+                    Warden stops AI coding agents and dependency updates from installing fake,
+                    look-alike, or tampered npm packages before they ever run.
+                </p>
 
-            <p class="subtitle">
-                Fresh scans. Explicit policies. Test results. <br>
-                Review dependency changes from any developer or coding agent.
-            </p>
-
-            <div class="install-container">
-                <div class="install-header">
-                    <span class="active-tab">npm install · older release (v1.8.0)</span>
-                </div>
-                <div class="code-box">
-                    <code id="install-command">npm install -g @devdonzo/warden</code>
-                    <button class="copy-btn" id="copy-btn" type="button" aria-label="Copy install command">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2" aria-hidden="true">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                        </svg>
-                    </button>
-                </div>
-                <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
-                <div class="compatibility-note">
-                    Stable CLI: macOS, Linux, and Windows.<br>
-                    Verification is in the v1.10.0 GitHub source release; npm still serves v1.8.0. <a href="https://github.com/hamza-paracha/warden/blob/main/docs/VERIFICATION.md">Build and try it →</a>
-                </div>
-            </div>
-
-            <div class="features-grid">
-                <div class="feature-item">
-                    <div class="feature-icon">👁️</div>
-                    <h3>Compare findings</h3>
-                    <p>Fresh npm-audit scans show resolved, remaining, and new advisories.</p>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon">🔧</div>
-                    <h3>Run the checks</h3>
-                    <p>Verify target advisories and run tests in a restricted container.</p>
-                </div>
-                <div class="feature-item">
-                    <div class="feature-icon">🤝</div>
-                    <h3>Review the evidence</h3>
-                    <p>Inspect commit identities, policy outcomes, and scan/test records.</p>
+                <div class="install-container">
+                    <div class="install-header">
+                        <span>Install</span>
+                        <span class="install-meta">Node 22.12+ · no AI model · no account</span>
+                    </div>
+                    <div class="code-box">
+                        <code id="install-command">npm install -g @devdonzo/warden</code>
+                        <button class="copy-btn" id="copy-btn" type="button" aria-label="Copy install command">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2" aria-hidden="true">
+                                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
+                    <p class="compatibility-note">Then run <code>warden agent-setup claude devin</code> in your project.</p>
                 </div>
             </div>
-        </main>
 
-        <footer class="footer">
-            <p>© 2026 DevDonzo. Released under ISC License.</p>
-            <p class="author-credit">
-                Author: <a href="https://www.linkedin.com/in/hamza-paracha-03a091266/" target="_blank" rel="noopener">Hamza Paracha</a>
-            </p>
-        </footer>
-    </div>
+            <figure class="intercept" aria-labelledby="intercept-caption">
+                <div class="intercept-bar">
+                    <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span>warden guard</span>
+                </div>
+                <ol class="intercept-log">
+                    <li class="line cmd"><span class="who">agent</span> npm install reqeusts colros chalk@5</li>
+                    <li class="line dim">warden ─ checking 3 packages</li>
+                    <li class="line block"><b>BLOCK</b> reqeusts <span>doesn't exist on npm, so an attacker could claim the name</span></li>
+                    <li class="line block"><b>BLOCK</b> colros <span>doesn't exist on npm · did you mean <u>colors</u>?</span></li>
+                    <li class="line allow"><b>ALLOW</b> chalk@5.6.2 <span>nothing risky added since the last version</span></li>
+                    <li class="line exit">install stopped · the agent is told why</li>
+                </ol>
+                <figcaption id="intercept-caption">What happens when an AI agent tries to install a package that doesn't exist.</figcaption>
+            </figure>
+        </section>
 
-    <dialog class="release-modal" id="release-modal" data-version="1.10.0" aria-labelledby="release-title" aria-describedby="release-intro">
+        <section class="diff-section" aria-labelledby="diff-title">
+            <div class="section-head">
+                <p class="eyebrow">Why it matters</p>
+                <h2 id="diff-title">Most security tools only catch attacks that are already known.</h2>
+                <p>In 2025, hijacked versions of popular packages and a self-spreading worm were installed for hours
+                    before anyone flagged them. Warden compares each new version with the one before it and flags
+                    anything risky it <em>adds</em>, so normal updates stay quiet.</p>
+            </div>
+
+            <div class="manifest" role="table" aria-label="Example of what Warden reports for a hijacked package version">
+                <div class="manifest-head" role="row">
+                    <span role="columnheader">Example: a hijacked package update</span>
+                    <span role="columnheader">Result: <b class="tag block">BLOCK</b></span>
+                </div>
+                <div class="manifest-row" role="row"><span class="sev critical" role="cell">critical</span><span role="cell">New code reads your secrets and sends data over the internet</span></div>
+                <div class="manifest-row" role="row"><span class="sev high" role="cell">high</span><span role="cell">Published 2 hours ago, before anyone could review it</span></div>
+                <div class="manifest-row" role="row"><span class="sev high" role="cell">high</span><span role="cell">The last version was verified by its publisher; this one isn't</span></div>
+                <div class="manifest-row" role="row"><span class="sev high" role="cell">high</span><span role="cell">Hooks into crypto wallets and web requests</span></div>
+                <div class="manifest-row" role="row"><span class="sev medium" role="cell">medium</span><span role="cell">Published by an account that didn't release the earlier versions</span></div>
+            </div>
+
+            <ul class="signal-cloud" aria-label="What Warden checks">
+                <li>packages that don't exist</li><li>look-alike names</li><li>brand-new releases</li>
+                <li>missing publisher verification</li><li>new install scripts</li><li>password and token theft</li>
+                <li>hidden network calls</li><li>scrambled code</li><li>tampered lockfiles</li>
+            </ul>
+        </section>
+
+        <section class="surfaces" aria-labelledby="surfaces-title">
+            <div class="section-head">
+                <p class="eyebrow">What you can do with it</p>
+                <h2 id="surfaces-title">Check packages before, during, and after a change.</h2>
+            </div>
+            <ol class="surface-grid">
+                <li>
+                    <span class="step">01</span>
+                    <h3>Before installing</h3>
+                    <p>Check any package before it touches your machine.</p>
+                    <code>warden inspect express</code>
+                </li>
+                <li>
+                    <span class="step">02</span>
+                    <h3>Pull requests</h3>
+                    <p>Check every package a pull request adds, without running its code.</p>
+                    <code>warden review . --base main</code>
+                </li>
+                <li>
+                    <span class="step">03</span>
+                    <h3>Security fixes</h3>
+                    <p>Confirm a fix removed the vulnerability and the tests still pass.</p>
+                    <code>warden verify</code>
+                </li>
+                <li>
+                    <span class="step">04</span>
+                    <h3>Proof</h3>
+                    <p>Sign the results so reviewers can tell nothing was changed.</p>
+                    <code>warden attest</code>
+                </li>
+            </ol>
+        </section>
+
+        <section class="agents" aria-labelledby="agents-title">
+            <div class="agents-copy">
+                <p class="eyebrow">Works with your AI agent</p>
+                <h2 id="agents-title">One command protects every install your agent makes.</h2>
+                <p>Warden checks installs before they run and tells the agent why it blocked one, so it can pick a
+                    safe package instead. Agents can also ask Warden directly before they choose a dependency.</p>
+                <code class="big-command">warden agent-setup claude devin codex</code>
+            </div>
+            <dl class="agent-tools">
+                <div><dt>Claude Code</dt><dd>pre-install check and built-in tools</dd></div>
+                <div><dt>Devin</dt><dd>pre-install check and built-in tools</dd></div>
+                <div><dt>Codex</dt><dd>built-in tools</dd></div>
+            </dl>
+        </section>
+
+        <section class="proof" aria-label="Key facts">
+            <div><strong>0</strong><span>AI models, accounts, or cloud services needed</span></div>
+            <div><strong>0</strong><span>lines of package code run while checking</span></div>
+            <div><strong>3</strong><span>coding agents supported: Claude Code, Devin, and Codex</span></div>
+        </section>
+
+        <section class="limits" aria-labelledby="limits-title">
+            <h2 id="limits-title">Good to know</h2>
+            <p>Warden covers npm packages today. It flags what to review; it doesn't prove a package is malware.
+                <a href="https://github.com/hamza-paracha/warden/blob/main/docs/SUPPLY-CHAIN.md">Read the guide →</a></p>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>© 2026 DevDonzo · ISC License</p>
+        <p>Built by <a href="https://www.linkedin.com/in/hamza-paracha-03a091266/" target="_blank" rel="noopener">Hamza Paracha</a></p>
+    </footer>
+
+    <dialog class="release-modal" id="release-modal" data-version="supply-chain-guard" aria-labelledby="release-title" aria-describedby="release-intro">
         <button class="release-close" id="release-close" type="button" aria-label="Close what's new" autofocus>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
                 <path d="m6 6 12 12M18 6 6 18"></path>
             </svg>
         </button>
-        <p class="release-eyebrow">THE LATEST FROM WARDEN <span>v1.10.0 · source release</span></p>
-        <h2 id="release-title">Verify the fix.<br>Keep the evidence.</h2>
-        <p class="release-intro" id="release-intro">Check committed npm dependency patches with fresh security scans and test results.</p>
-        <div class="release-performance">
-            <span class="release-metric">216<small>PASSING TESTS</small></span>
-            <div>
-                <h3>A verifier built for review</h3>
-                <p>Compare exact Git revisions without modifying your working checkout.</p>
-            </div>
-        </div>
+        <p class="release-eyebrow">New in Warden</p>
+        <h2 id="release-title">Warden now checks packages before they install.</h2>
+        <p class="release-intro" id="release-intro">Stop a malicious package before it reaches your machine, your CI, or your AI agent.</p>
         <ul class="release-features">
-            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Confirm the advisory is gone</h3><p>Fresh base and candidate scans detect remaining, new, and worsened findings.</p></div></li>
-            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Run isolated checks</h3><p>Docker runs candidate tests without network access. Missing evidence stays incomplete.</p></div></li>
-            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Keep reviewable evidence</h3><p>JSON and Markdown bundles record commit identities, policy outcomes, and test results.</p></div></li>
+            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Version comparison</h3><p>Flags risky code a new version adds compared with the one before it.</p></div></li>
+            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Agent protection</h3><p>Blocks fake and look-alike packages in Claude Code, Devin, and Codex.</p></div></li>
+            <li><span class="release-dot" aria-hidden="true"></span><div><h3>Signed results</h3><p>Reviewers can confirm the results weren't changed.</p></div></li>
         </ul>
-        <p class="release-benchmark">GitHub source release: single-package npm repositories with v2/v3 lockfiles. Build from source until npm publication.</p>
         <div class="release-actions">
-            <a href="https://github.com/hamza-paracha/warden/releases/tag/v1.10.0" target="_blank" rel="noopener">Full release notes <span aria-hidden="true">↗</span></a>
+            <a href="https://github.com/hamza-paracha/warden/blob/main/docs/SUPPLY-CHAIN.md" target="_blank" rel="noopener">Read the guide <span aria-hidden="true">↗</span></a>
             <button id="release-dismiss" type="button">Got it</button>
         </div>
     </dialog>
