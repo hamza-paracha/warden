@@ -10,6 +10,7 @@ import {
     VerifyOptions,
 } from '../src/verification';
 import { runProcess, ProcessError } from '../src/services/process';
+import * as supplyChain from '../src/supply-chain';
 
 jest.mock('../src/services/process', () => ({
     ...jest.requireActual('../src/services/process'),
@@ -129,6 +130,7 @@ beforeEach(() => {
     });
 });
 afterEach(() => {
+    jest.restoreAllMocks();
     jest.clearAllMocks();
     fs.rmSync(root, { recursive: true, force: true });
 });
@@ -295,4 +297,66 @@ it('rejects workspaces', async () => {
     git('commit', '--quiet', '-m', 'workspace');
     options.head = git('rev-parse', 'HEAD');
     expect((await verifyChange(options)).reasons.join(' ')).toContain('single-package');
+});
+
+describe('supply-chain review', () => {
+    const review = (status: 'passed' | 'failed' | 'incomplete', reasons: string[] = []) =>
+        ({
+            schemaVersion: 1,
+            kind: 'dependency-review',
+            startedAt: '',
+            status,
+            exitCode: 0,
+            reasons,
+            policy: supplyChain.DEFAULT_POLICY,
+            summary: {
+                added: 1,
+                updated: 0,
+                removed: 0,
+                reviewed: 1,
+                blocked: status === 'failed' ? 1 : 0,
+                warned: 0,
+            },
+            lockfileSignals: [],
+            packages: [],
+        }) as supplyChain.DependencyReview;
+
+    it('reviews lockfiles by default with policy from the base and records it', async () => {
+        const spy = jest.spyOn(supplyChain, 'reviewLockfiles');
+        const evidence = await verifyChange(options);
+        expect(evidence.status).toBe('passed');
+        expect(evidence.supplyChain?.status).toBe('passed');
+        expect(spy.mock.calls[0][2]?.policy).toEqual(supplyChain.DEFAULT_POLICY);
+        expect(fs.readFileSync(path.join(options.output, 'verification.md'), 'utf8')).toContain(
+            'Supply-chain review: passed (0 releases'
+        );
+    });
+
+    it('fails when a newly installed release is blocked', async () => {
+        jest.spyOn(supplyChain, 'reviewLockfiles').mockResolvedValue(
+            review('failed', ['Blocked: evil@1.0.0'])
+        );
+        const evidence = await verifyChange(options);
+        expect(evidence.status).toBe('failed');
+        expect(evidence.reasons.join(' ')).toContain('Blocked: evil@1.0.0');
+    });
+
+    it('is incomplete when release evidence cannot be collected', async () => {
+        jest.spyOn(supplyChain, 'reviewLockfiles').mockResolvedValue(
+            review('incomplete', ['offline'])
+        );
+        const evidence = await verifyChange(options);
+        expect(evidence.status).toBe('incomplete');
+        expect(evidence.reasons.join(' ')).toContain('Supply-chain review incomplete: offline');
+    });
+
+    it('can be disabled explicitly', async () => {
+        const spy = jest.spyOn(supplyChain, 'reviewLockfiles');
+        const evidence = await verifyChange({ ...options, supplyChain: false });
+        expect(spy).not.toHaveBeenCalled();
+        expect(evidence.supplyChain).toBeUndefined();
+        expect(fs.readFileSync(path.join(options.output, 'verification.md'), 'utf8')).toContain(
+            'Supply-chain review: not run'
+        );
+    });
 });

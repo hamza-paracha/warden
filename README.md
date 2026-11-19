@@ -1,305 +1,319 @@
 # Warden
 
-**Verify dependency fixes with fresh security scans, test results, and reviewable evidence.**
+**A supply-chain firewall for coding agents and dependency PRs.**
 
-Current GitHub source release: **v1.10.0**. npm latest remains **v1.8.0**.
+Warden checks what each npm release does that the previous one did not, blocks
+hallucinated and typosquatted packages before an agent installs them, and verifies
+dependency fixes with fresh scans, isolated tests, and signed evidence. No LLM,
+account, or hosted service required.
 
 [![npm version](https://img.shields.io/npm/v/@devdonzo/warden?style=for-the-badge)](https://www.npmjs.com/package/@devdonzo/warden)
 [![CI](https://img.shields.io/github/actions/workflow/status/hamza-paracha/warden/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/hamza-paracha/warden/actions/workflows/ci.yml)
 [![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg?style=for-the-badge)](LICENSE)
 
-Warden scans Node.js and Python dependencies, prioritizes vulnerabilities, applies
-fixes within your policy, and can open GitHub PRs for review. Every run produces
-reports that explain what was found, what changed, and what policy allowed or blocked.
+> **Status:** the supply-chain guard, agent integration, and attestations are on
+> `main` and unreleased. Dependency verification shipped in the v1.10.0 GitHub source
+> release. npm still serves **v1.8.0**, which has neither. Install from source below.
 
-## Verify dependency fixes
+## Why
 
-Check a dependency patch from any developer or coding agent. Warden compares
-fresh base/candidate npm-audit reports, checks the target advisory, runs tests,
-and writes JSON/Markdown evidence for review.
+`npm audit` only knows about attacks that already have an advisory. The 2025
+`chalk`/`debug` maintainer hijack and the Shai-Hulud worm shipped clean-looking
+releases that installed for hours before any advisory existed. Meanwhile, coding
+agents add dependencies with nobody watching, sometimes picking names that don't
+exist. Attackers can register those names later ("slopsquatting").
 
-```sh
-warden verify /path/to/repo --base main --head dependency-fix \
-  --advisory GHSA-xxxx-yyyy-zzzz --test-command '["npm","test"]'
+Warden asks a different question: **what does this release do that the last one
+didn't?** It compares each release with its predecessor and reports only new
+behavior, so established packages stay quiet.
+
+```text
+$ warden guard "npm install reqeusts colros chalk@5"
+Verdict: BLOCK
+BLOCK reqeusts@latest
+  - [critical] reqeusts does not exist on the registry. Coding agents often invent
+    package names, and attackers register them later (slopsquatting).
+BLOCK colros@latest
+  - [critical] colros does not exist on the registry. ... Did you mean colors?
+ALLOW chalk@5.6.2 (published 2025-09-08, by sindresorhus, no provenance, diffed against 5.6.0)
 ```
-
-Replace the placeholder advisory with one observed in the base. The initial
-implementation supports single-package npm repositories and v2/v3 lockfiles.
-Docker is the default test runner; pull `node:24-bookworm-slim` first. For a
-repository you trust, `--test-runner trusted-host` explicitly enables host tests.
-A missing scanner, missing tests, or unavailable runner produces **incomplete**,
-never a pass. No LLM provider is required.
-
-See the [verification guide](docs/VERIFICATION.md) for setup, boundaries, evidence,
-and exit codes, and the [research and direction](docs/PRODUCT-DIRECTION.md) for
-the adoption experiment. Verification is available from the v1.10.0 GitHub source
-release; build it and use `node dist/index.js verify ...`. npm publication is pending.
-
-## Engineering highlights
-
-- **Patch verification:** compare immutable Git revisions, rescan both dependency trees,
-  check target advisory removal, and detect new or worsened findings.
-- **Isolated tests:** Docker runs candidate tests without network access; missing
-  evidence produces an explicit incomplete result.
-- **Policy-driven remediation:** severity thresholds, fix limits, accepted-risk
-  baselines, and reviewable GitHub pull requests.
-- **Review evidence:** JSON/Markdown verification bundles, SARIF 2.1.0 scan reports,
-  stable finding fingerprints, and atomic artifact writes.
-
-### Prioritization performance
-
-The scanning and remediation core has been refactored for less overhead, safer
-process execution, and more reliable results.
-
-| Change | What you get |
-|---|---|
-| **Up to 9× faster prioritization** | Select the most urgent findings without sorting an entire large report |
-| **Scan-only mode** | Generate reports and evaluate CI gates without attempting fixes |
-| **SARIF 2.1.0 export** | Export findings for CI integrations, including from saved scans |
-| **Configurable scanner timeouts** | Bound each SAST scanner attempt and record execution timing |
-| **Stricter scanner handling** | Malformed reports and operational failures fail instead of looking like clean scans |
-| **Safer remediation** | Literal Git arguments and commits that stage only remediation files |
-| **Smaller runtime dependency set** | The published CLI no longer requires TypeScript or ts-node |
-| **Atomic JSON writes** | Readers see complete reports; failed replacement preserves the previous file |
-
-### What “9× faster” measures
-
-A deterministic benchmark with **100,000 findings**, on Node.js 26.8.1:
-
-| Fix limit | Previous full sort | New bounded selection | Speedup |
-|---|---:|---:|---:|
-| 1 | 14.17 ms | 1.52 ms | 9.33× |
-| 10 | 14.56 ms | 1.75 ms | 8.33× |
-| 100 | 14.59 ms | 1.79 ms | 8.15× |
-
-These are median timings for **vulnerability prioritization**, not end-to-end scan
-speedups. Scanner, registry, and GitHub latency still affect total run time.
-Results vary by machine. The benchmark checks that both implementations select
-identical findings.
-
-From a source checkout, reproduce with `npm run benchmark`.
-See [refactor and performance notes](docs/REFACTOR.md) for implementation details,
-test coverage, and why this release stays with TypeScript rather than adding Rust.
 
 ## Install
 
 Requires **Node.js 22.12 or newer**.
 
 ```bash
-npm install -g @devdonzo/warden
+git clone https://github.com/hamza-paracha/warden
+cd warden
+npm ci
+npm run build
+npm install -g .
 warden --version
 ```
 
-For development:
-
-```bash
-npm ci
-npm run build
-```
+`npm install -g @devdonzo/warden` installs the older v1.8.0 scanner and remediation
+CLI without the features in this README's first sections.
 
 ## Quick start
 
-Scan and generate reports without attempting fixes:
-
 ```bash
-warden scan . --scan-only --scanner npm-audit
+warden inspect chalk lodash@^4 @scope/pkg@1.2.3     # before installing
+warden review . --base origin/main                  # any dependency PR
+warden agent-setup claude devin                     # guard your coding agents
 ```
 
-Preview up to two high-severity fixes:
+| Command | Answers | Exit codes |
+|---|---|---|
+| `warden inspect <specs...>` | Is it safe to install these packages? | 0 allow/warn · 2 block · 3 incomplete |
+| `warden review [repo] --base <ref> [--head <ref>]` | Is anything this lockfile change installs risky? | 0 passed · 2 failed · 3 incomplete |
+| `warden guard "<command>"` | Would this shell command install something risky? | 0 allow/warn · 2 block |
+| `warden verify [repo] --base --head --advisory --test-command` | Did this fix remove the advisory without breaking tests or adding risk? | 0 passed · 2 failed · 3 incomplete |
+| `warden attest sign / check` | Can a reviewer trust this evidence without rerunning it? | 0 valid · 1 invalid |
+
+`review` reads both lockfiles with `git show`. It never checks out, installs, or
+runs repository code, so it is safe on untrusted pull requests, including
+Dependabot and Renovate PRs.
+
+## What Warden checks
+
+Release contents are downloaded, verified against their integrity hash, and read
+entirely in memory; nothing from a package is written to disk or executed. Code
+signals count only when they are new compared with the same file in the previous release.
+
+| Signal | Severity |
+|---|---|
+| Package name does not exist (hallucinated) | critical |
+| Lockfile changes the integrity hash of an already-locked version, or disagrees with the registry | critical |
+| Tarball install scripts differ from registry metadata (manifest confusion) | critical |
+| Newly reads credentials or the environment **and** opens network connections | critical |
+| Ships `trufflehog`/`gitleaks`, or runs `curl … \| sh` | critical |
+| Name imitates a popular package and has under 50,000 weekly downloads | high |
+| Released less than 24 hours ago (configurable) | high |
+| Previous release had provenance; this one does not | high |
+| `preinstall`/`install`/`postinstall` script added or changed | high |
+| Newly reads `.npmrc`, SSH keys, cloud credentials, or tokens; serializes `process.env` | high |
+| Overrides `fetch`/`XMLHttpRequest`, touches `window.ethereum`; obfuscated code; ships a GitHub workflow | high |
+| Dependency resolves outside the registry | high |
+| New child processes, dynamic code, network access, native binaries, minified rewrites | medium |
+| New publisher on a recent release; brand-new package | medium |
+
+A signal at or above `blockAt` (default `high`) blocks; `medium` warns. Signals tell
+you what to review, not that a package is malware. Type declarations are skipped,
+and test or example files are downgraded one level.
+
+In a local test, `warden review` checked all 411 releases in Warden's own
+dependency tree in about 9 seconds with no blocks. The 2 warnings were newly shipped
+native binaries.
+
+## Coding agents
 
 ```bash
-warden scan . --dry-run --scanner npm-audit --severity high --max-fixes 2
+warden agent-setup claude devin     # writes project-level config, preserving existing settings
+warden agent-setup codex            # prints the ~/.codex/config.toml snippet
 ```
 
-Run a scan with CI policy gates and machine-readable output:
+| Agent | MCP server | Install guard hook |
+|---|---|---|
+| Claude Code | `.mcp.json` | `.claude/settings.json` (PreToolUse, matcher `Bash`) |
+| Devin | `.devin/mcp_config.json` | `.devin/hooks.v1.json` (PreToolUse, matcher `exec`) |
+| Codex | `~/.codex/config.toml` (printed, not written) | — |
 
-```bash
-warden scan . --scan-only --ci --json --scanner npm-audit --severity high
+**Hook.** `warden guard --hook` runs before every shell command. It finds packages
+installed or executed by `npm install/add/update`, `npx`, `npm exec`, `npm create`,
+`pnpm add/dlx`, `yarn add/dlx`, `bun add`, and `bunx`, checks them, and blocks with
+exit code 2 and a reason the agent can act on. Git, URL, and file installs warn
+because they bypass registry history. If the registry is unreachable, the hook
+allows the install unless `--fail-closed` is set.
+
+**MCP tools.** `warden mcp` serves four tools over stdio:
+
+| Tool | Purpose |
+|---|---|
+| `check_packages` | Allow/warn/block verdicts with reasons for package specs |
+| `check_install_command` | Parse a shell command and check every package it would install |
+| `review_dependency_change` | Review the lockfile change between two commits |
+| `verify_dependency_fix` | Run the full verification (audit, tests, release review) |
+
+## Policy
+
+Add a `supplyChain` section to `.wardenrc.json`:
+
+```json
+{
+  "supplyChain": {
+    "minReleaseAgeHours": 24,
+    "blockAt": "high",
+    "allow": ["esbuild", "some-pkg@1.2.3"],
+    "diff": true,
+    "establishedDownloads": 50000,
+    "maxPackages": 300,
+    "concurrency": 6
+  }
+}
 ```
 
-Open the local console to inspect posture, findings, trends, and artifacts:
+`review` and `verify` read policy from the **base** revision, so a pull request
+cannot allowlist its own dependency. `inspect` accepts `--min-age`, `--block-at`,
+and `--no-diff` for one-off overrides.
 
-```bash
-warden console
+## Verify dependency fixes
+
+Check a dependency security patch from any developer or coding agent:
+
+```sh
+warden verify /path/to/repo --base main --head dependency-fix \
+  --advisory GHSA-xxxx-yyyy-zzzz --test-command '["npm","test"]'
 ```
 
-## How it works
+Warden resolves both commits, snapshots them into disposable workspaces, runs fresh
+`npm audit` scans, confirms the target advisory was present before and is gone
+after, flags new or worsened findings, runs the tests, and reviews every newly
+installed release (`--no-supply-chain` to skip). Docker is the default test runner
+with no network access; pull `node:24-bookworm-slim` first, or use
+`--test-runner trusted-host` for a repository you trust. A missing scanner, missing
+tests, or unavailable runner produces **incomplete**, never a pass. Your working tree
+and index are never modified.
+
+Supports single-package npm repositories with v2/v3 lockfiles. See the
+[verification guide](docs/VERIFICATION.md).
+
+## Signed evidence
+
+```sh
+warden attest keygen                                    # .warden/keys/warden-attest.{key,pub}
+warden review . --base main --attest-key .warden/keys/warden-attest.key
+warden attest check scan-results/review/dependency-review.intoto.json \
+  --key .warden/keys/warden-attest.pub
+```
+
+`verify` and `review` evidence is wrapped as an in-toto Statement v1 in a DSSE
+envelope and signed with Ed25519. Subjects are the base and head commits and their
+lockfile SHA-256 digests. Any edit to the evidence invalidates the signature. Keep
+the private key out of Git (`.warden/keys/` is ignored). Keyless Sigstore signing is
+not implemented.
+
+## CI on pull requests
+
+```yaml
+name: Warden dependency review
+on:
+  pull_request:
+    paths: ['package-lock.json']
+permissions:
+  contents: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: '24' }
+      - run: |
+          git clone --depth 1 https://github.com/hamza-paracha/warden /tmp/warden
+          cd /tmp/warden && npm ci && npm run build && npm install -g .
+      - run: warden review . --base "origin/${{ github.base_ref }}" --head HEAD
+      - if: always()
+        run: cat scan-results/review/dependency-review.md >> "$GITHUB_STEP_SUMMARY"
+```
+
+## Scanning and remediation
+
+Warden's original workflow scans Node.js and Python dependencies, prioritizes
+findings, applies fixes your policy allows, and opens GitHub PRs for review:
 
 ```text
 scan → prioritize → check policy → apply allowed fixes → open PR → record results
 ```
 
-- **Watchman** scans dependencies with Snyk, npm-audit, or pip-audit.
-- **Engineer** diagnoses selected findings and applies supported dependency fixes.
-- **Diplomat** pushes remediation branches and opens PRs when GitHub credentials are configured.
-- **Policy gates** enforce approval requirements and CI failure thresholds.
-- **Baselines, history, and memory** track regressions, run trends, and recurring packages.
-
-Warden also supports infrastructure advisory workflows through Nmap and optional
-Metasploit integrations. Configure authorized targets before using `warden dast`.
-
-## Commands and controls
-
 ```bash
-warden scan [repository-or-path]
-warden dast <target>
-warden baseline --create
-warden baseline --check --severity high
+warden scan . --scan-only --scanner npm-audit                       # reports only
+warden scan . --dry-run --scanner npm-audit --severity high --max-fixes 2
+warden scan . --scan-only --ci --json --scanner npm-audit --severity high
+warden baseline --create && warden baseline --check --severity high  # accepted-risk baselines
 warden export-sarif --input scan-results/scan-results.json --output results.sarif
-warden console
-warden validate
-warden bootstrap-ci --scanner npm-audit --severity high
+warden console                                                       # local dashboard
 ```
 
-Useful scan flags:
+- **Scanners:** Snyk, npm-audit, or pip-audit (`--scanner`). `all` is a fallback
+  chain, not an aggregate.
+- **Policy gates:** severity and posture thresholds, fix limits, and an approval
+  requirement (`--approval-token approved` is a workflow signal, not authentication).
+- **Reports:** `scan-results/` holds normalized JSON, SARIF 2.1.0, Markdown, HTML, an
+  agent run record, history, and recurring-package memory. JSON contracts are in
+  [`schemas/`](schemas/).
+- **PRs:** set `GITHUB_TOKEN` to push remediation branches and open PRs. `SNYK_TOKEN`
+  authenticates Snyk; `RESEND_API_KEY` enables email notifications.
+- **Performance:** finding prioritization is up to 9× faster on 100,000-finding
+  reports. The figure measures selection only, not end-to-end scans; see
+  [refactor notes](docs/REFACTOR.md).
 
-| Flag | Behavior |
-|---|---|
-| `--scan-only` | Generate reports without remediation attempts |
-| `--dry-run` | Preview selected fixes without applying them |
-| `--scanner <type>` | Choose `snyk`, `npm-audit`, `pip-audit`, or `all` |
-| `--severity <level>` | Minimum severity for fix selection |
-| `--max-fixes <n>` | Limit remediation attempts; zero selects no fixes |
-| `--scan-timeout <ms>` | Timeout per SAST scanner attempt |
-| `--ci` | Apply configured CI policy gates and failure exit codes |
-| `--json` | Write the run result as JSON |
-| `--approval-token approved` | Satisfy the configured remediation approval gate |
-
-`all` retains the existing fallback-chain behavior; it does not aggregate every
-scanner. Explicit npm-audit and pip-audit selections run the requested scanner.
-Snyk retries and fallback attempts can make total run time exceed one attempt’s
-timeout. `--severity` controls fix selection; CI failure thresholds live in policy configuration.
-
-## Accepted-risk baselines
-
-Create and commit a baseline from a saved scan:
-
-```bash
-warden baseline --create
-git add .warden-baseline.json
-```
-
-After a new scan, check for new or worsened high-risk findings:
-
-```bash
-warden baseline --check --severity high
-```
-
-## SARIF and durable reports
-
-Successful orchestrated scans write `scan-results/warden.sarif` automatically.
-You can also export a saved scan without contacting a scanner:
-
-```bash
-warden export-sarif --input scan-results/scan-results.json --output results.sarif
-```
-
-The SARIF report includes advisory rules, severity levels, stable finding
-fingerprints, and dependency manifest locations. It does not invent source line
-numbers; infrastructure findings omit manifest locations.
-
-| Artifact | Purpose |
-|---|---|
-| `scan-results.json` | Normalized findings and SAST execution timing |
-| `warden.sarif` | SARIF 2.1.0 output for CI integrations |
-| `warden-report.md` | Human-readable operator report |
-| `scan-results.html` | HTML report |
-| `agent-run-record.json` | Findings, selected fixes, policy reasons, branches, and PRs |
-| `warden-approval-request.json` | Approval request when policy blocks remediation |
-| `history.json` | Run history and trends |
-| `memory.json` | Recurring vulnerable package memory |
-
-Artifacts live in `scan-results/`. The accepted-risk baseline lives separately at
-`.warden-baseline.json`. Warden’s JSON artifact contracts are in [`schemas/`](schemas/).
-
-## Configuration
-
-Example `.wardenrc.json`:
+<details>
+<summary>Example scanner configuration</summary>
 
 ```json
 {
-  "scanner": {
-    "primary": "snyk",
-    "fallback": true,
-    "timeout": 60000,
-    "retries": 3
-  },
-  "fixes": {
-    "maxPerRun": 2,
-    "minSeverity": "high"
-  },
+  "scanner": { "primary": "snyk", "fallback": true, "timeout": 60000, "retries": 3 },
+  "fixes": { "maxPerRun": 2, "minSeverity": "high" },
   "policy": {
     "failOnSeverity": "critical",
     "failOnPosture": "critical",
     "requireApprovalAboveSeverity": "high"
-  },
-  "notifications": {
-    "enabled": false,
-    "email": {
-      "to": ["security@example.com"],
-      "from": "Warden <warden@example.com>",
-      "provider": "resend",
-      "apiKeyEnv": "RESEND_API_KEY"
-    }
   }
 }
 ```
 
-Optional environment variables:
+</details>
+
+Infrastructure advisory workflows through Nmap and optional Metasploit integrations
+are available with `warden dast <target>` for authorized targets.
+
+## Limits
+
+- npm registry and npm v2/v3 lockfiles only. pnpm/yarn lockfiles, private registry
+  authentication, and monorepos are not supported yet.
+- Release analysis compares what changed in the code; it doesn't run it. A payload
+  fetched only at runtime from a clean-looking release shows up as a new network
+  capability, not as the payload itself.
+- The typosquat list is bundled and offline; weekly download counts come from
+  `api.npmjs.org`.
+- Passing checks do not certify that software is secure. Human review decides
+  whether to merge.
+
+## Development
 
 ```bash
-GITHUB_TOKEN=...   # Enables branch pushes and PR creation
-SNYK_TOKEN=...     # Authenticates Snyk scans
-RESEND_API_KEY=... # Enables configured Resend email notifications
-```
-
-Email delivery also supports a generic webhook through
-`notifications.email.webhook`.
-
-## Development and verification
-
-The current source passes **216 tests across 29 suites**. CI checks TypeScript
-builds, test coverage, formatting, and packaged CLI smoke tests on Node.js 22 and
-24. A separate CI job exercises a real dependency patch with host and Docker test
-runners. The verifier has its own coverage gate; the broader project still has
-coverage gaps, particularly in remediation and orchestration. Live authenticated
-GitHub and external DAST operations are outside the offline test coverage.
-
-```bash
-npm test -- --runInBand
+npm ci
 npm run build
+npm test -- --runInBand
 npm run smoke
 ```
 
-Use targeted tests during development. `npm run release:check` performs the full
-clean/build/test/package gate when preparing a release.
-
-## Repository map
+The current source passes **288 tests across 34 suites**. CI runs builds, tests with
+coverage gates, formatting, and packaged CLI smoke tests on Node.js 22 and 24, plus
+a real dependency-patch job with host and Docker test runners. Unit tests use an
+in-memory registry and never hit the network. `npm run release:check` runs the full
+release gate.
 
 | Directory | Responsibility |
 |---|---|
+| `src/supply-chain/` | Registry client, in-memory tarball reader, release diffing, lockfile review, policy |
+| `src/guard/`, `src/mcp/` | Install-command parsing, agent hooks and setup, MCP server |
+| `src/attestation/` | DSSE/in-toto signing and verification |
 | `src/verification/` | Dependency patch comparison, test runners, and evidence |
-| `src/scanners/`, `src/agents/watchman/` | Scanner adapters and normalized findings |
-| `src/agents/engineer/`, `src/agents/diplomat/` | Dependency fixes, Git branches, and PRs |
+| `src/scanners/`, `src/agents/` | Scanner adapters, dependency fixes, Git branches, and PRs |
 | `src/workflows/`, `src/services/`, `src/utils/` | Orchestration, process execution, policy, and reports |
-| `__tests__/`, `scripts/` | Regression tests, package smoke checks, and benchmarks |
-| `schemas/`, `examples/`, `docs/` | Artifact contracts, integration examples, and guides |
-| `website/`, `video/` | Website and promotional video sources |
+| `__tests__/`, `scripts/` | Tests, fixtures, smoke checks, and benchmarks |
+| `schemas/`, `docs/`, `website/` | Artifact contracts, guides, and the project website |
 
 ## Documentation
 
-- [Current priorities and known gaps](docs/IMPROVEMENTS.md)
-
-- [What changed and benchmark details](docs/REFACTOR.md)
+- [Supply-chain guard, agents, and attestations](docs/SUPPLY-CHAIN.md)
+- [Dependency fix verification](docs/VERIFICATION.md)
 - [Changelog](docs/CHANGELOG.md)
-- [Copyable CI workflow](docs/EXAMPLE-CI.md)
-- [Warden and interactive coding agents](docs/WARDEN-VS-CODEX.md)
-- [Contributing](.github/CONTRIBUTING.md)
-- [Security policy](.github/SECURITY.md)
-
-Concurrent workflows within a single Node.js process remain unsupported because
-workflows still change the process working directory. Atomic files protect
-readers from partial writes; history and memory are not a multi-process database.
+- [Product direction](docs/PRODUCT-DIRECTION.md) and [current priorities](docs/IMPROVEMENTS.md)
+- [Copyable scanner CI workflow](docs/EXAMPLE-CI.md)
+- [Contributing](.github/CONTRIBUTING.md) · [Security policy](.github/SECURITY.md)
 
 ## License
 
