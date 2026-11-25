@@ -24,8 +24,13 @@ No AI model, account, or hosted service is needed.
 
 Requires Node.js 22.12 or newer.
 
+> **Source-only for now.** The commands below are on the main branch and ship in the
+> next npm release. Until then, `npm install -g @devdonzo/warden` installs an older
+> version without them, so install from source:
+
 ```bash
-npm install -g @devdonzo/warden
+git clone https://github.com/hamza-paracha/warden.git
+cd warden && npm ci && npm run build && npm install -g .
 warden --version
 ```
 

@@ -42,10 +42,11 @@
     "clean:video": "rm -rf video/out",
     "clean:all": "npm run clean && npm run clean:video",
     "smoke": "node scripts/smoke-test.js && node scripts/package-smoke-test.js",
-    "release:check": "npm run clean:all && npm run build && npm test && npm run smoke && npm pack --dry-run",
+    "release:check": "npm run clean:all && npm run build && npm test && npm run smoke && npm run smoke:quickstart && npm pack --dry-run",
     "prepublishOnly": "npm run build && npm test",
     "benchmark": "npm run build && node scripts/benchmark.js",
-    "smoke:verify:live": "npm run build && node scripts/verification-live-smoke.js"
+    "smoke:verify:live": "npm run build && node scripts/verification-live-smoke.js",
+    "smoke:quickstart": "node scripts/quickstart-smoke.js"
   },
   "keywords": [
     "security",

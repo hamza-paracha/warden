@@ -253,6 +253,18 @@ li p code {
     font-size: 0.88rem;
 }
 
+.availability-note {
+    margin-top: 0.6rem;
+    color: var(--faint);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+}
+
+.availability-note b {
+    color: var(--signal);
+    font-weight: 500;
+}
+
 /* Intercept log */
 .intercept {
     border: 1px solid var(--line);

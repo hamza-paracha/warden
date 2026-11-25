@@ -371,6 +371,7 @@ describe('lockfile review', () => {
                 base: 'HEAD~1',
                 head: 'HEAD',
                 client,
+                now,
             });
             expect(review.status).toBe('failed');
             expect(review.revisions?.head.lockfileSha256).toMatch(/^[a-f0-9]{64}$/);
@@ -379,6 +380,7 @@ describe('lockfile review', () => {
                 base: 'HEAD~1',
                 head: 'HEAD',
                 client,
+                now,
                 overrides: { minReleaseAgeHours: 0 },
             });
             expect(lenient.status).toBe('passed');

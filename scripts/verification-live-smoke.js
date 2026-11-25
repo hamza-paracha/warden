@@ -19,6 +19,12 @@ const env = {
     npm_config_userconfig: path.join(temporary, 'empty-user.npmrc'),
     npm_config_globalconfig: path.join(temporary, 'empty-global.npmrc'),
 };
+// Optional: keep each evidence bundle (for CI job summaries/artifacts) and link it from verification.md.
+const keep = process.env.WARDEN_EVIDENCE_DIR && path.resolve(process.env.WARDEN_EVIDENCE_DIR);
+const evidenceUrl = process.env.WARDEN_EVIDENCE_URL;
+const save = (from, name) => {
+    if (keep) fs.cpSync(from, path.join(keep, name), { recursive: true });
+};
 const command = (exe, args) =>
     execFileSync(exe, args, { cwd: repository, env, encoding: 'utf8', timeout: 120000 });
 const git = (...args) => command('git', args).trim();
@@ -99,6 +105,7 @@ try {
         '--output',
         output,
         '--json',
+        ...(evidenceUrl ? ['--evidence-url', evidenceUrl] : []),
     ];
     const run = spawnSync(process.execPath, args, {
         cwd: repository,
@@ -115,6 +122,27 @@ try {
     assert.equal(git('rev-parse', 'HEAD'), head);
     console.log(
         `Live verification passed: lodash 4.17.4 -> ${latest}; ${evidence.targets.length} target advisories resolved; tests passed; checkout unchanged.`
+    );
+    save(output, 'passed-trusted-host');
+    // A base that is already patched cannot show the advisory was fixed: the result must be incomplete.
+    const wrongBase = [...args];
+    wrongBase[wrongBase.indexOf(base)] = head;
+    wrongBase[wrongBase.indexOf(output)] = path.join(temporary, 'incomplete evidence');
+    const incomplete = spawnSync(process.execPath, wrongBase, {
+        cwd: repository,
+        env,
+        encoding: 'utf8',
+        timeout: 120000,
+    });
+    assert.equal(incomplete.status, 3, incomplete.stderr || incomplete.stdout);
+    assert.equal(JSON.parse(incomplete.stdout).status, 'incomplete');
+    assert.match(
+        fs.readFileSync(path.join(temporary, 'incomplete evidence/verification.md'), 'utf8'),
+        /Result: INCOMPLETE\*\*.*unverified/
+    );
+    save(path.join(temporary, 'incomplete evidence'), 'incomplete-example');
+    console.log(
+        'Live incomplete example passed: an already-patched base is reported as unverified.'
     );
     // The container path is checked when an already running Docker daemon is available.
     const docker = spawnSync('docker', ['info', '--format', '{{.ServerVersion}}'], {
@@ -134,6 +162,7 @@ try {
         });
         assert.equal(container.status, 0, container.stderr || container.stdout);
         assert.equal(JSON.parse(container.stdout).status, 'passed');
+        save(output, 'passed-docker');
         console.log('Live Docker verification passed.');
     } else {
         console.log(

@@ -41,11 +41,11 @@
 
                 <div class="install-container">
                     <div class="install-header">
-                        <span>Install</span>
+                        <span>Install from source</span>
                         <span class="install-meta">Node 22.12+ · no AI model · no account</span>
                     </div>
                     <div class="code-box">
-                        <code id="install-command">npm install -g @devdonzo/warden</code>
+                        <code id="install-command">git clone https://github.com/hamza-paracha/warden.git &amp;&amp; cd warden &amp;&amp; npm ci &amp;&amp; npm run build &amp;&amp; npm install -g .</code>
                         <button class="copy-btn" id="copy-btn" type="button" aria-label="Copy install command">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" aria-hidden="true">
@@ -56,6 +56,9 @@
                     </div>
                     <p class="copy-status" id="copy-status" role="status" aria-live="polite"></p>
                     <p class="compatibility-note">Then run <code>warden agent-setup claude devin</code> in your project.</p>
+                    <p class="availability-note" data-availability="source-only"><b>Source-only for now.</b> The commands on
+                        this page are on the main branch and ship in the next npm release. Until then,
+                        <code>npm install -g @devdonzo/warden</code> installs an older version without them.</p>
                 </div>
             </div>
 
@@ -108,6 +111,7 @@
             <div class="section-head">
                 <p class="eyebrow">What you can do with it</p>
                 <h2 id="surfaces-title">Check packages before, during, and after a change.</h2>
+                <p class="availability-note" data-availability="source-only">Source-only until the next npm release.</p>
             </div>
             <ol class="surface-grid">
                 <li>
@@ -144,6 +148,7 @@
                 <p>Warden checks installs before they run and tells the agent why it blocked one, so it can pick a
                     safe package instead. Agents can also ask Warden directly before they choose a dependency.</p>
                 <code class="big-command">warden agent-setup claude devin codex</code>
+                <p class="availability-note" data-availability="source-only">Source-only until the next npm release.</p>
             </div>
             <dl class="agent-tools">
                 <div><dt>Claude Code</dt><dd>pre-install check and built-in tools</dd></div>
@@ -178,7 +183,7 @@
         </button>
         <p class="release-eyebrow">New in Warden</p>
         <h2 id="release-title">Warden now checks packages before they install.</h2>
-        <p class="release-intro" id="release-intro">Stop a malicious package before it reaches your machine, your CI, or your AI agent.</p>
+        <p class="release-intro" id="release-intro">Stop a malicious package before it reaches your machine, your CI, or your AI agent. Source-only until the next npm release.</p>
         <ul class="release-features">
             <li><span class="release-dot" aria-hidden="true"></span><div><h3>Version comparison</h3><p>Flags risky code a new version adds compared with the one before it.</p></div></li>
             <li><span class="release-dot" aria-hidden="true"></span><div><h3>Agent protection</h3><p>Blocks fake and look-alike packages in Claude Code, Devin, and Codex.</p></div></li>

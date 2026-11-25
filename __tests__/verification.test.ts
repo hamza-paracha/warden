@@ -7,6 +7,8 @@ import {
     parseAudit,
     compareFindings,
     advisoryId,
+    dependencyChanges,
+    formatVerificationMarkdown,
     VerifyOptions,
 } from '../src/verification';
 import { runProcess, ProcessError } from '../src/services/process';
@@ -358,5 +360,215 @@ describe('supply-chain review', () => {
         expect(fs.readFileSync(path.join(options.output, 'verification.md'), 'utf8')).toContain(
             'Supply-chain review: not run'
         );
+    });
+});
+
+describe('reviewer summary', () => {
+    const lock = (deps: Record<string, string>, nested: Record<string, string> = {}) => ({
+        lockfileVersion: 3,
+        packages: {
+            '': { version: '1.0.0', dependencies: { lodash: deps.lodash ?? '*' } },
+            ...Object.fromEntries(
+                Object.entries(deps).map(([name, version]) => [`node_modules/${name}`, { version }])
+            ),
+            ...Object.fromEntries(Object.entries(nested).map(([at, version]) => [at, { version }])),
+        },
+    });
+
+    it('lists changed installed versions with direct dependencies first', () => {
+        expect(
+            dependencyChanges(
+                lock({ lodash: '4.17.4', ms: '2.0.0', old: '1.0.0' }),
+                lock(
+                    { lodash: '4.18.1', ms: '2.0.0', fresh: '1.0.0' },
+                    { 'node_modules/a/node_modules/lodash': '3.0.0' }
+                )
+            )
+        ).toEqual([
+            { name: 'lodash', from: '4.17.4', to: '4.18.1', direct: true },
+            { name: 'fresh', to: '1.0.0', direct: false },
+            { name: 'lodash', to: '3.0.0', direct: false },
+            { name: 'old', from: '1.0.0', direct: false },
+        ]);
+    });
+
+    it('keeps a change direct when a nested copy makes the same upgrade, in either lock order', () => {
+        const entries = {
+            'node_modules/aaa': '1.0.0',
+            'node_modules/y': '1.0.0',
+            'node_modules/y/node_modules/aaa': '1.0.0',
+        };
+        const lockOf = (order: string[], upgraded: boolean) => ({
+            lockfileVersion: 3,
+            packages: {
+                '': { version: '1.0.0', dependencies: { aaa: '^1.0.0', y: '1.0.0' } },
+                ...Object.fromEntries(
+                    order.map((at) => [
+                        at,
+                        {
+                            version:
+                                upgraded && at.endsWith('/aaa')
+                                    ? '1.1.0'
+                                    : entries[at as keyof typeof entries],
+                        },
+                    ])
+                ),
+            },
+        });
+        const directFirst = Object.keys(entries);
+        const nestedFirst = [...directFirst].reverse();
+        for (const order of [directFirst, nestedFirst])
+            expect(dependencyChanges(lockOf(order, false), lockOf(order, true))).toEqual([
+                { name: 'aaa', from: '1.0.0', to: '1.1.0', direct: true },
+            ]);
+    });
+
+    it('only claims install and test steps that actually ran', () => {
+        const evidence = (runner: string, checks: Record<string, any>) =>
+            formatVerificationMarkdown({
+                schemaVersion: 1,
+                startedAt: '2026-11-24T00:00:00.000Z',
+                status: 'incomplete',
+                exitCode: 3,
+                reasons: ['Requested advisory was not observed in the base.'],
+                runner,
+                testCommand: ['npm', 'test'],
+                scanner: { name: 'npm-audit', command: [] },
+                targets: [advisory],
+                revisions: {},
+                checks,
+            });
+        const check = (status: string) => ({ command: [], startedAt: '', status });
+        for (const runner of ['trusted-host', 'docker']) {
+            const stopped = evidence(runner, {});
+            expect(stopped).toContain('`npm test`: **not run**');
+            expect(stopped).not.toContain('Dependencies were installed');
+            expect(stopped).not.toContain('tests ran');
+            expect(stopped).toContain(
+                '- Verification stopped before dependencies were installed; tests did not run.'
+            );
+            const installFailed = evidence(runner, { install: check('failed') });
+            expect(installFailed).not.toContain('Dependencies were installed');
+            expect(installFailed).not.toContain('tests ran');
+            const noTests = evidence(runner, { install: check('passed') });
+            expect(noTests).toContain('Dependencies were installed with `--ignore-scripts`');
+            expect(noTests).toContain('tests did not run');
+            expect(noTests).not.toContain('tests ran');
+        }
+        expect(evidence('docker', { install: check('passed'), tests: check('failed') })).toContain(
+            'tests ran offline in a resource-limited container'
+        );
+        expect(
+            evidence('trusted-host', { install: check('passed'), tests: check('passed') })
+        ).toContain('tests ran directly on the host (`trusted-host`) without container isolation');
+    });
+
+    it('shows versions, per-advisory results, tests, limitations, and the evidence link', async () => {
+        fs.writeFileSync(
+            path.join(repo, 'package-lock.json'),
+            JSON.stringify(lock({ lodash: '4.17.4' }))
+        );
+        fs.writeFileSync(
+            path.join(repo, 'package.json'),
+            JSON.stringify({
+                name: 'fixture',
+                version: '1.0.0',
+                scripts: { test: 'node test.js' },
+                dependencies: { lodash: '4.17.4' },
+            })
+        );
+        git('add', 'package.json', 'package-lock.json');
+        git('commit', '--quiet', '-m', 'vulnerable');
+        options.base = git('rev-parse', 'HEAD');
+        fs.writeFileSync(
+            path.join(repo, 'package-lock.json'),
+            JSON.stringify(lock({ lodash: '4.18.1' }))
+        );
+        fs.writeFileSync(
+            path.join(repo, 'package.json'),
+            JSON.stringify({
+                name: 'fixture',
+                version: '1.0.0',
+                scripts: { test: 'node test.js' },
+                dependencies: { lodash: '4.18.1' },
+            })
+        );
+        git('add', 'package.json', 'package-lock.json');
+        git('commit', '--quiet', '-m', 'patched');
+        options.head = git('rev-parse', 'HEAD');
+        jest.spyOn(supplyChain, 'reviewLockfiles').mockResolvedValue({
+            status: 'passed',
+            reasons: [],
+            summary: { reviewed: 1, blocked: 0, warned: 0 },
+        } as any);
+        baseAudit = audit([{ name: 'lodash' }]);
+        const evidence = await verifyChange({
+            ...options,
+            evidenceUrl: 'https://github.com/o/r/actions/runs/1',
+        });
+        expect(evidence.status).toBe('passed');
+        expect(evidence.dependencyChanges).toEqual([
+            { name: 'lodash', from: '4.17.4', to: '4.18.1', direct: true },
+        ]);
+        const md = fs.readFileSync(path.join(options.output, 'verification.md'), 'utf8');
+        expect(md).toContain('**Result: PASSED**. Every target advisory is gone');
+        expect(md).toContain('| lodash | 4.17.4 | 4.18.1 | direct |');
+        expect(md).toContain(`| ${advisory.toUpperCase()} | lodash | present (high) | resolved |`);
+        expect(md).toContain('- Runner: trusted-host');
+        expect(md).toContain('`npm test` on trusted-host: **passed** (exit 0)');
+        expect(md).toContain(
+            'Dependencies were installed with `--ignore-scripts`; tests ran directly on the host (`trusted-host`) without container isolation.'
+        );
+        expect(md).toContain('- Published evidence: https://github.com/o/r/actions/runs/1');
+        expect(
+            JSON.parse(
+                fs.readFileSync(path.join(options.output, 'verification-summary.json'), 'utf8')
+            )
+        ).toMatchObject({
+            status: 'passed',
+            tests: 'passed',
+            dependencyChanges: [{ name: 'lodash' }],
+        });
+    });
+
+    it('says plainly that an incomplete result is unverified and why', async () => {
+        baseAudit = audit();
+        const evidence = await verifyChange({ ...options, supplyChain: false });
+        expect(evidence.status).toBe('incomplete');
+        const md = fs.readFileSync(path.join(options.output, 'verification.md'), 'utf8');
+        expect(md).toContain('**Result: INCOMPLETE**');
+        expect(md).toContain("so it is **unverified**. Don't treat this as a pass");
+        expect(md).toContain(`| ${advisory.toUpperCase()} | - | not found | not verifiable |`);
+        expect(md).toContain('## What stopped it');
+        expect(md).toContain('Requested advisory was not observed in the base');
+        expect(md).toContain('`npm test`: **not run**');
+        expect(md).not.toContain('Dependencies were installed');
+        expect(md).not.toContain('tests ran');
+        expect(md).toContain('behavior review of newly installed releases did not run');
+    });
+
+    it('explains failures and escapes table cells', () => {
+        const md = formatVerificationMarkdown({
+            schemaVersion: 1,
+            startedAt: '2026-11-24T00:00:00.000Z',
+            status: 'failed',
+            exitCode: 2,
+            reasons: ['Candidate tests failed.\nsee log'],
+            runner: 'docker',
+            scanner: { name: 'npm-audit', command: [] },
+            targets: [advisory],
+            revisions: {},
+            checks: {
+                install: { command: [], startedAt: '', status: 'passed' },
+                tests: { command: [], startedAt: '', status: 'failed', exitCode: 1 },
+            },
+            dependencyChanges: [{ name: 'a|b', from: '1.0.0', direct: false }],
+        });
+        expect(md).toContain('**Result: FAILED**');
+        expect(md).toContain('| a\\|b | 1.0.0 | removed | transitive |');
+        expect(md).toContain(`| ${advisory} | - | unknown | unknown |`);
+        expect(md).toContain('## Why\n\n- Candidate tests failed. see log');
+        expect(md).toContain('offline in a resource-limited container');
+        expect(md).not.toContain('Published evidence');
     });
 });

@@ -35,6 +35,9 @@ jobs:
       - name: Run smoke test
         run: npm run smoke
 
+      - name: Run advertised quickstart against a clean install
+        run: npm run smoke:quickstart
+
       - name: Check CLI works
         run: |
           node dist/index.js --version
@@ -87,4 +90,23 @@ jobs:
       - name: Verify a real dependency patch with host and container runners
         env:
           WARDEN_LIVE_DOCKER: '1'
+          WARDEN_EVIDENCE_DIR: ${{ runner.temp }}/warden-evidence
+          WARDEN_EVIDENCE_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: node scripts/verification-live-smoke.js
+      - name: Publish reviewer summaries
+        if: always()
+        env:
+          EVIDENCE: ${{ runner.temp }}/warden-evidence
+        run: |
+          for name in passed-docker passed-trusted-host incomplete-example; do
+            file="$EVIDENCE/$name/verification.md"
+            [ -f "$file" ] || continue
+            { echo "<details$( [ "$name" != incomplete-example ] && echo ' open')><summary>Evidence bundle: $name</summary>"; echo; sed 's/^# /### /; s/^## /#### /' "$file"; echo; echo "</details>"; echo; } >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Upload verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-evidence
+          path: ${{ runner.temp }}/warden-evidence
+          if-no-files-found: ignore

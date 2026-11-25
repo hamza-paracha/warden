@@ -456,6 +456,7 @@ export async function reviewDependencyChange(options: {
     /** Applied on top of the base revision's policy. */
     overrides?: Partial<SupplyChainPolicy>;
     client?: RegistryClient;
+    now?: Date;
 }): Promise<DependencyReview> {
     const lockfile = options.lockfile ?? 'package-lock.json';
     if (lockfile.startsWith('/') || lockfile.split('/').includes('..'))
@@ -504,6 +505,7 @@ export async function reviewDependencyChange(options: {
                 ),
             }),
         client: options.client,
+        now: options.now,
     });
     review.revisions = revisions;
     return review;

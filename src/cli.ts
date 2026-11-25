@@ -248,11 +248,17 @@ program
         '--attest-key <path>',
         'Sign the evidence as a DSSE/in-toto attestation with this Ed25519 key'
     )
+    .option(
+        '--evidence-url <url>',
+        'Where reviewers can download the evidence (linked in the summary)'
+    )
     .action(async (repository, options) => {
         try {
             const testCommand = JSON.parse(options.testCommand);
             if (!Array.isArray(testCommand))
                 throw new Error('--test-command must be a JSON argument array.');
+            if (options.evidenceUrl && !/^https?:\/\/\S+$/.test(options.evidenceUrl))
+                throw new Error('--evidence-url must be an http(s) URL.');
             const { verifyChange } = await import('./verification');
             const result = await verifyChange({
                 repository: path.resolve(repository),
@@ -266,6 +272,7 @@ program
                 output: options.output,
                 image: options.image,
                 supplyChain: options.supplyChain,
+                evidenceUrl: options.evidenceUrl,
             });
             if (options.attestKey) {
                 const { attestFile } = await import('./attestation');

@@ -10,6 +10,7 @@ import {
     reviewLockfiles,
     SupplyChainPolicy,
 } from '../supply-chain';
+import { lockEntries } from '../supply-chain/lockfile';
 
 export type Finding = { id: string; package: string; severity: string; aliases?: string[] };
 export type Check = {
@@ -36,7 +37,10 @@ export interface VerifyOptions {
     /** Review newly installed releases for supply-chain risk (default true). */
     supplyChain?: boolean;
     supplyChainPolicy?: SupplyChainPolicy;
+    /** Where reviewers can download the published evidence files, linked from verification.md. */
+    evidenceUrl?: string;
 }
+export type DependencyChange = { name: string; from?: string; to?: string; direct: boolean };
 export type Evidence = {
     schemaVersion: 1;
     startedAt: string;
@@ -45,6 +49,8 @@ export type Evidence = {
     exitCode: number;
     reasons: string[];
     runner: string;
+    severity?: string;
+    testCommand?: string[];
     scanner: { name: string; version?: string; command: string[] };
     targets: string[];
     revisions: Record<
@@ -53,6 +59,7 @@ export type Evidence = {
     >;
     checks: Record<string, Check>;
     changedFiles?: string[];
+    dependencyChanges?: DependencyChange[];
     comparison?: ReturnType<typeof compareFindings>;
     supplyChain?: DependencyReview;
 };
@@ -303,6 +310,8 @@ export async function verifyChange(options: VerifyOptions): Promise<Evidence> {
         exitCode: 3,
         reasons: [],
         runner: options.runner,
+        severity: options.severity,
+        testCommand: options.testCommand,
         targets,
         revisions: {},
         checks: {},
@@ -391,6 +400,10 @@ export async function verifyChange(options: VerifyOptions): Promise<Evidence> {
         ).stdout
             .split('\0')
             .filter(Boolean);
+        evidence.dependencyChanges = dependencyChanges(
+            readLock(path.join(temp, 'base')),
+            readLock(path.join(temp, 'head'))
+        );
         evidence.comparison = compareFindings(
             evidence.revisions.base.findings!,
             evidence.revisions.head.findings!,
@@ -549,27 +562,10 @@ export async function verifyChange(options: VerifyOptions): Promise<Evidence> {
                 targets: evidence.targets,
                 base: evidence.revisions.base?.sha,
                 head: evidence.revisions.head?.sha,
+                dependencyChanges: evidence.dependencyChanges,
+                tests: evidence.checks.tests?.status ?? 'not run',
             });
-            const md = [
-                '# Warden dependency verification',
-                '',
-                `**Result: ${evidence.status.toUpperCase()}**`,
-                '',
-                `- Base: ${evidence.revisions.base?.sha || 'unresolved'}`,
-                `- Candidate: ${evidence.revisions.head?.sha || 'unresolved'}`,
-                `- Targets: ${targets.join(', ')}`,
-                `- Runner: ${options.runner}`,
-                `- New findings: ${evidence.comparison?.newFindings.length ?? 'unknown'}`,
-                `- Resolved findings: ${evidence.comparison?.resolved.length ?? 'unknown'}`,
-                `- Test status: ${evidence.checks.tests?.status || 'not run'}`,
-                `- Supply-chain review: ${evidence.supplyChain ? `${evidence.supplyChain.status} (${evidence.supplyChain.summary.reviewed} releases, ${evidence.supplyChain.summary.blocked} blocked, ${evidence.supplyChain.summary.warned} warned)` : 'not run'}`,
-                '',
-                ...evidence.reasons.map((reason) => `- ${reason.replace(/[\r\n]/g, ' ')}`),
-                '',
-                'Full commands, scanner output, timestamps, lockfile hashes and outcomes: verification.json.',
-                'This result covers configured checks; it does not certify that the application is secure.',
-                '',
-            ].join('\n');
+            const md = formatVerificationMarkdown(evidence, { evidenceUrl: options.evidenceUrl });
             const pending = path.join(output, `.verification-${randomUUID()}.tmp`);
             try {
                 fs.writeFileSync(pending, md);
@@ -582,4 +578,166 @@ export async function verifyChange(options: VerifyOptions): Promise<Evidence> {
         }
     }
     return evidence;
+}
+
+const readLock = (dir: string) =>
+    JSON.parse(fs.readFileSync(path.join(dir, 'package-lock.json'), 'utf8'));
+
+/** Installed package versions that differ between two lockfiles, direct dependencies first. */
+export function dependencyChanges(baseLock: any, headLock: any): DependencyChange[] {
+    const declared = new Set(
+        [baseLock, headLock].flatMap((lock) =>
+            ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'].flatMap(
+                (field) => Object.keys(lock.packages?.['']?.[field] ?? {})
+            )
+        )
+    );
+    const base = new Map(lockEntries(baseLock).map((e) => [e.path, e]));
+    const head = new Map(lockEntries(headLock).map((e) => [e.path, e]));
+    const rows = new Map<string, DependencyChange>();
+    for (const location of new Set([...base.keys(), ...head.keys()])) {
+        const from = base.get(location);
+        const to = head.get(location);
+        if (from?.version === to?.version && from?.name === to?.name) continue;
+        const name = (to ?? from)!.name;
+        const row = {
+            name,
+            from: from?.version,
+            to: to?.version,
+            direct: declared.has(name) && location === `node_modules/${name}`,
+        };
+        const key = `${name}|${row.from}|${row.to}`;
+        rows.set(key, { ...row, direct: row.direct || Boolean(rows.get(key)?.direct) });
+    }
+    return [...rows.values()].sort(
+        (a, b) => Number(b.direct) - Number(a.direct) || a.name.localeCompare(b.name)
+    );
+}
+
+const cell = (value: unknown) =>
+    String(value)
+        .replace(/[\r\n]+/g, ' ')
+        .replace(/\|/g, '\\|');
+const MAX_ROWS = 25;
+
+/** Describe only the install and test steps the evidence records as having run. */
+function executionLimitation({ checks: { install, tests }, runner }: Evidence): string {
+    const docker = runner === 'docker';
+    if (!install)
+        return '- Verification stopped before dependencies were installed; tests did not run.';
+    if (install.status !== 'passed')
+        return `- Dependency installation did not complete (${install.status}); tests did not run.`;
+    const installed = `- Dependencies were installed with \`--ignore-scripts\``;
+    if (!tests)
+        return `${installed} ${docker ? 'in a resource-limited container' : 'directly on the host (`trusted-host`)'}; tests did not run.`;
+    if (tests.status === 'incomplete')
+        return `${installed}; tests were started ${docker ? 'offline in a resource-limited container' : 'directly on the host (`trusted-host`) without container isolation'} but did not finish.`;
+    return docker
+        ? `${installed}; tests ran offline in a resource-limited container.`
+        : `${installed}; tests ran directly on the host (\`trusted-host\`) without container isolation.`;
+}
+
+/** Reviewer summary for a pull request: what changed, what was checked, and what was not. */
+export function formatVerificationMarkdown(
+    evidence: Evidence,
+    options: { evidenceUrl?: string } = {}
+): string {
+    const { comparison, checks, supplyChain } = evidence;
+    const severity = evidence.severity ?? 'high';
+    const tests = checks.tests;
+    const testCommand = evidence.testCommand ?? tests?.command ?? [];
+    const headline = {
+        passed: `Every target advisory is gone from the candidate, no new or worsened findings reached ${severity}, and the candidate's tests passed.`,
+        failed: 'The checks ran, and the candidate does not meet the bar. See **Why** below.',
+        incomplete:
+            "Warden could not finish verifying this patch, so it is **unverified**. Don't treat this as a pass; see **What stopped it** below.",
+    }[evidence.status];
+    const lines = [
+        '# Warden dependency verification',
+        '',
+        `**Result: ${evidence.status.toUpperCase()}**. ${headline}`,
+        '',
+        `- Base: \`${evidence.revisions.base?.sha || 'unresolved'}\``,
+        `- Candidate: \`${evidence.revisions.head?.sha || 'unresolved'}\``,
+        `- Runner: ${evidence.runner}`,
+        '',
+        '## Dependency changes',
+        '',
+    ];
+    const changes = evidence.dependencyChanges;
+    if (!changes) lines.push('Not compared: verification stopped before the lockfiles were read.');
+    else if (!changes.length) lines.push('No installed package versions changed.');
+    else {
+        lines.push('| Package | Base | Candidate | Scope |', '| --- | --- | --- | --- |');
+        for (const c of changes.slice(0, MAX_ROWS))
+            lines.push(
+                `| ${cell(c.name)} | ${cell(c.from ?? 'not installed')} | ${cell(c.to ?? 'removed')} | ${c.direct ? 'direct' : 'transitive'} |`
+            );
+        if (changes.length > MAX_ROWS)
+            lines.push(
+                '',
+                `${changes.length - MAX_ROWS} more changes are listed in verification.json.`
+            );
+    }
+    lines.push(
+        '',
+        '## Target advisories',
+        '',
+        '| Advisory | Package | Base | Candidate |',
+        '| --- | --- | --- | --- |'
+    );
+    for (const id of evidence.targets) {
+        const match = (f: Finding) => f.id === id || f.aliases?.includes(id);
+        const found = evidence.revisions.base?.findings?.find(match);
+        const [inBase, inHead] = !comparison
+            ? ['unknown', 'unknown']
+            : comparison.missingTargets.includes(id)
+              ? ['not found', 'not verifiable']
+              : [
+                    `present (${found?.severity})`,
+                    comparison.remainingTargets.includes(id) ? 'still present' : 'resolved',
+                ];
+        lines.push(`| ${cell(id)} | ${cell(found?.package ?? '-')} | ${inBase} | ${inHead} |`);
+    }
+    lines.push(
+        '',
+        '## Tests',
+        '',
+        tests
+            ? `\`${cell(testCommand.join(' '))}\` on ${evidence.runner}: **${tests.status}**${tests.exitCode !== undefined ? ` (exit ${tests.exitCode})` : ''}${tests.durationMs !== undefined ? ` in ${(tests.durationMs / 1000).toFixed(1)}s` : ''}`
+            : `\`${cell(testCommand.join(' '))}\`: **not run**`,
+        '',
+        '## Other findings',
+        '',
+        `- New findings: ${comparison?.newFindings.length ?? 'unknown'}`,
+        `- Worsened findings: ${comparison?.worsened.length ?? 'unknown'}`,
+        `- New or worsened at ${severity} or above: ${comparison?.regressions.length ?? 'unknown'}`,
+        `- Resolved findings: ${comparison?.resolved.length ?? 'unknown'}`,
+        `- Supply-chain review: ${supplyChain ? `${supplyChain.status} (${supplyChain.summary.reviewed} releases, ${supplyChain.summary.blocked} blocked, ${supplyChain.summary.warned} warned)` : 'not run'}`
+    );
+    if (evidence.reasons.length)
+        lines.push(
+            '',
+            evidence.status === 'incomplete' ? '## What stopped it' : '## Why',
+            '',
+            ...evidence.reasons.map((reason) => `- ${cell(reason)}`)
+        );
+    lines.push(
+        '',
+        '## Limitations',
+        '',
+        `- Advisory status comes from \`npm audit\`${evidence.scanner.version ? ` (npm ${evidence.scanner.version})` : ''} against the public npm registry at ${evidence.finishedAt ?? evidence.startedAt}. Advisories published later, or missing from that database, are not covered.`,
+        '- Tests only show what the test command exercises. Passing tests do not prove the application behaves the same.',
+        executionLimitation(evidence),
+        ...(supplyChain ? [] : ['- The behavior review of newly installed releases did not run.']),
+        '- Scope is single-package npm projects. This result covers the configured checks; it does not certify that the application is secure.',
+        '',
+        '## Evidence',
+        '',
+        ...(options.evidenceUrl ? [`- Published evidence: ${options.evidenceUrl}`] : []),
+        '- `verification.json`: every command, exit code, output, timestamp, commit SHA, and lockfile hash.',
+        '- `verification-summary.json`: the result in machine-readable form.',
+        ''
+    );
+    return lines.join('\n');
 }

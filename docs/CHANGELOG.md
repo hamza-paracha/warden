@@ -13,6 +13,22 @@
   and a `warden mcp` stdio server for coding agents.
 - Added `warden attest` to sign and check evidence as DSSE-wrapped in-toto statements.
 - Added `semver` as a runtime dependency.
+- `verification.md` is now a reviewer summary: changed package versions, per-advisory
+  base/candidate status, test outcome, limitations, and evidence links
+  (`warden verify --evidence-url`). Incomplete results say explicitly that the patch
+  is unverified. `verification.json` records `dependencyChanges`, `testCommand`, and
+  `severity`.
+- CI publishes the live lodash verification summaries, a passing one and an
+  intentionally incomplete one, to the job summary and uploads the evidence.
+- Added `npm run smoke:quickstart`, a release gate that installs the packed CLI into a
+  clean prefix and runs every command shown on the homepage and README. It requires
+  them to be labeled source-only while the version is not on npm.
+- `verification.md` now describes install and test steps from what was recorded, so a
+  run that stopped early no longer claims dependencies were installed or tests ran.
+- A dependency change stays marked direct when a nested copy of the same package makes
+  the same upgrade.
+- Fixed a test that depended on the wall clock when reviewing Git revisions
+  (`reviewDependencyChange` now accepts `now`).
 
 ## [1.10.0] - 2026-11-15
 

@@ -67,6 +67,9 @@ jobs:
       - name: Run smoke test
         run: npm run smoke
 
+      - name: Run advertised quickstart against a clean install
+        run: npm run smoke:quickstart
+
       - name: Verify package can be packed
         run: npm pack --dry-run
 

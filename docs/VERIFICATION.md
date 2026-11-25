@@ -87,8 +87,73 @@ Evidence files:
 - `verification.json`: immutable commit identities, changed file paths,
   manifest/lockfile hashes, targets, normalized findings, comparison, tool
   version, command records, stdout/stderr, and per-check outcomes.
-- `verification.md`: concise reviewer summary.
+- `verification.md`: reviewer summary for the pull request (see below).
 - `verification-summary.json`: small machine-readable summary.
+
+## Reviewer summary
+
+`verification.md` is written so a reviewer can judge the patch from the pull request
+alone, without installing anything. It lists the changed package versions (direct
+dependencies first), each target advisory in the base and candidate, the test command
+and outcome, other new or resolved findings, the reasons for any failure, the
+limitations of this run, and where the evidence is. Pass `--evidence-url <url>` to
+link the published evidence, for example the CI run that uploaded it.
+
+This is the passing result from CI's live check, which patches lodash 4.17.4 to 4.18.1
+(abridged):
+
+```markdown
+**Result: PASSED**. Every target advisory is gone from the candidate, no new or worsened findings reached high, and the candidate's tests passed.
+
+| Package | Base | Candidate | Scope |
+| --- | --- | --- | --- |
+| lodash | 4.17.4 | 4.18.1 | direct |
+
+| Advisory | Package | Base | Candidate |
+| --- | --- | --- | --- |
+| GHSA-JF85-CPCP-J695 | lodash | present (critical) | resolved |
+| GHSA-35JH-R3H4-6JHM | lodash | present (high) | resolved |
+| (7 more) | lodash | present | resolved |
+
+`npm test` on trusted-host: **passed** (exit 0)
+```
+
+An incomplete result never reads like a pass. The same job verifies those nine
+advisories against a base that is already patched. Warden can't show the patch fixed
+anything, so it reports:
+
+```markdown
+**Result: INCOMPLETE**. Warden could not finish verifying this patch, so it is **unverified**. Don't treat this as a pass; see **What stopped it** below.
+
+| Advisory | Package | Base | Candidate |
+| --- | --- | --- | --- |
+| GHSA-JF85-CPCP-J695 | - | not found | not verifiable |
+
+`npm test`: **not run**
+
+## What stopped it
+
+- Requested advisory was not observed in the base; remediation is unverified.
+```
+
+Both full summaries appear in the job summary of CI's `verification-container` job, and
+the evidence bundles are uploaded as the `verification-evidence` artifact. To show the
+summary on your own dependency pull requests:
+
+```yaml
+- run: >
+    warden verify . --base "origin/${{ github.base_ref }}" --head HEAD
+    --advisory GHSA-xxxx-yyyy-zzzz --test-command '["npm","test"]'
+    --output warden-evidence
+    --evidence-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+- if: always()
+  run: cat warden-evidence/verification.md >> "$GITHUB_STEP_SUMMARY"
+- if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: warden-evidence
+    path: warden-evidence
+```
 
 Each artifact is written atomically. Treat the JSON as local, unsigned evidence,
 not a signed attestation. Logs/test output can include repository-controlled
